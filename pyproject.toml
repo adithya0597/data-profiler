@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "data-profiler"
+version = "0.1.0"
+description = "Multi-engine data profiler with portable type schema and cross-engine comparison"
+requires-python = ">=3.10"
+dependencies = [
+    "sqlalchemy>=2.0",
+    "duckdb>=0.9",
+    "duckdb-engine>=0.11",
+    "pydantic>=2.0",
+    "rich>=13.0",
+    "click>=8.0",
+]
+
+[project.optional-dependencies]
+snowflake = ["snowflake-sqlalchemy>=1.5"]
+databricks = ["databricks-sql-connector>=3.0", "sqlalchemy-databricks>=0.2"]
+parquet = ["pyarrow>=14.0"]
+html = ["jinja2>=3.1"]
+all = [
+    "snowflake-sqlalchemy>=1.5",
+    "databricks-sql-connector>=3.0",
+    "sqlalchemy-databricks>=0.2",
+    "pyarrow>=14.0",
+    "jinja2>=3.1",
+]
+dev = ["pytest>=7.0", "pytest-cov>=4.0"]
+
+[project.scripts]
+profiler = "data_profiler.cli:cli"
+
+[tool.setuptools.packages.find]
+include = ["data_profiler*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

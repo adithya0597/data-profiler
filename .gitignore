@@ -1,0 +1,50 @@
+# Data files (generated, not checked in)
+data/
+*.duckdb
+*.duckdb.wal
+
+# Profiler output
+profiles/
+
+# Checkpoint database
+profiler_checkpoint.db
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+.venv/
+venv/
+
+# Environment
+.env
+.env.local
+credentials.json
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# AI scaffolding (not part of submission)
+.claude/
+CLAUDE.md
+project-state.md
+.claude-memory.md
+context.md
+memory.sh
+tools.md
+tasks/
+vault/
+scripts/
+verify_dashboard.sql
