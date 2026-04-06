@@ -120,7 +120,7 @@ def run_profiler(
             try:
                 result.constraints = discover_constraints(engine, table_name, config.schema_name)
             except Exception as e:
-                logger.debug("Constraint discovery failed for %s: %s", table_name, e)
+                logger.warning("Constraint discovery failed for %s: %s", table_name, e)
         return result
 
     def _handle_result(table_name: str, result: ProfiledTable) -> None:
@@ -138,7 +138,7 @@ def run_profiler(
                 if cs:
                     result.suggested_constraints = cs
             except Exception as e:
-                logger.debug("Constraint suggestion failed for %s: %s", table_name, e)
+                logger.warning("Constraint suggestion failed for %s: %s", table_name, e)
 
         serializer.flush(result)
         results.append(result)
@@ -187,7 +187,7 @@ def run_profiler(
                 serializer.write_trailer(relationships_to_dict(rels))
                 logger.info("Discovered %d relationships across %d tables", len(rels), len(results))
         except Exception as e:
-            logger.debug("Relationship discovery failed: %s", e)
+            logger.warning("Relationship discovery failed: %s", e)
 
     serializer.close()
     checkpoint.close()

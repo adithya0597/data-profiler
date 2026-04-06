@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
+import threading
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -12,6 +13,7 @@ class CheckpointDB:
 
     def __init__(self, path: str = "profiler_checkpoint.db"):
         self.path = path
+        self._lock = threading.Lock()
         self._conn = sqlite3.connect(path, check_same_thread=False)
         self._init_schema()
 
@@ -35,33 +37,36 @@ class CheckpointDB:
 
     def mark_started(self, run_id: str, table_name: str) -> None:
         now = datetime.now(timezone.utc).isoformat()
-        self._conn.execute(
-            """INSERT OR REPLACE INTO profiled_tables
-               (run_id, table_name, started_at, status)
-               VALUES (?, ?, ?, 'in_progress')""",
-            (run_id, table_name, now),
-        )
-        self._conn.commit()
+        with self._lock:
+            self._conn.execute(
+                """INSERT OR REPLACE INTO profiled_tables
+                   (run_id, table_name, started_at, status)
+                   VALUES (?, ?, ?, 'in_progress')""",
+                (run_id, table_name, now),
+            )
+            self._conn.commit()
 
     def mark_done(self, run_id: str, table_name: str) -> None:
         now = datetime.now(timezone.utc).isoformat()
-        self._conn.execute(
-            """UPDATE profiled_tables
-               SET completed_at = ?, status = 'done'
-               WHERE run_id = ? AND table_name = ?""",
-            (now, run_id, table_name),
-        )
-        self._conn.commit()
+        with self._lock:
+            self._conn.execute(
+                """UPDATE profiled_tables
+                   SET completed_at = ?, status = 'done'
+                   WHERE run_id = ? AND table_name = ?""",
+                (now, run_id, table_name),
+            )
+            self._conn.commit()
 
     def mark_error(self, run_id: str, table_name: str, error: str) -> None:
         now = datetime.now(timezone.utc).isoformat()
-        self._conn.execute(
-            """UPDATE profiled_tables
-               SET completed_at = ?, status = 'error', error_message = ?
-               WHERE run_id = ? AND table_name = ?""",
-            (now, error, run_id, table_name),
-        )
-        self._conn.commit()
+        with self._lock:
+            self._conn.execute(
+                """UPDATE profiled_tables
+                   SET completed_at = ?, status = 'error', error_message = ?
+                   WHERE run_id = ? AND table_name = ?""",
+                (now, error, run_id, table_name),
+            )
+            self._conn.commit()
 
     def get_completed_tables(self, run_id: str) -> set[str]:
         """Get tables that completed successfully (skip on resume)."""

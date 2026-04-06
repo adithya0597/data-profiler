@@ -510,7 +510,7 @@ def _compute_length_histogram(
     """
     qi = adapter.quote_identifier if adapter else lambda x: x
     qcol = qi(col_name)
-    qualified = f"{schema}.{table_name}" if schema else table_name
+    qualified = f"{qi(schema)}.{qi(table_name)}" if schema else qi(table_name)
     if sample_clause and not sample_clause.startswith("WHERE"):
         from_clause = f"FROM {qualified} {sample_clause}"
         where = f"WHERE {qcol} IS NOT NULL"
