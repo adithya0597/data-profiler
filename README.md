@@ -2,6 +2,21 @@
 
 Extracts statistical metadata from databases for data quality analysis and knowledge graph enrichment. Profiles tables across **Snowflake**, **Databricks**, **DuckDB**, and **SQLite**, producing structured output consumable by data catalogs, lineage systems, and constraint engines.
 
+## Design Intent
+
+This project implements the **metadata ingestion layer** of a larger knowledge platform — the component responsible for extracting typed, structured facts from heterogeneous data sources so that downstream systems (catalogs, lineage graphs, constraint engines) can consume them without per-engine translation logic.
+
+The architecture reflects this:
+
+- **Deterministic, typed metadata.** The 8-canonical-type system is a portable schema language: every engine's native type vocabulary normalizes to a single taxonomy, so a `TIMESTAMP_NTZ` from Snowflake and a `DATETIME` from DuckDB produce structurally identical metadata. This is the same problem a knowledge graph's type system solves — one representation, many sources.
+- **Declarative dispatch.** The `AGGREGATE_MAP` in `stats_worker.py` is a type→expression dispatch table — given a canonical type, it emits the correct SQL aggregates for that type on that engine. Adding a new metric or a new engine means extending the map, not rewriting control flow. This pattern is a step toward a DSL for profiling rules: define *what* to compute declaratively, let the engine adapter handle *how*.
+- **Graph-ready output.** The relationship worker discovers FK edges and functional dependencies statistically. The OpenMetadata exporter serializes table/column entities in catalog-native schema. These are not reporting features — they produce the nodes and edges a knowledge graph ingests directly.
+- **Engine abstraction via capability flags.** Each adapter declares what it supports (`supports_hll`, `supports_percentiles`, `supports_stddev`) and the profiling logic adapts without branching. This is the adapter pattern designed for a world where new engines are added by implementing an interface, not by modifying the core.
+
+The natural evolution is toward a **declarative profiling DSL** — where type mappings, anomaly rules, constraint patterns, and output schemas are defined as configuration rather than code, and the profiler becomes an interpreter that executes those definitions against any connected engine. The current `ProfilerConfig` (Pydantic model with typed toggles for every analysis pass) and `AGGREGATE_MAP` (type-keyed expression templates) are the foundation for that direction.
+
+---
+
 ## Feature Highlights
 
 ### Schema Intelligence
