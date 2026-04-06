@@ -15,53 +15,220 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com;">
 <title>Data Profile Report — {run_id}</title>
 <style>
+@import url('https://fonts.googleapis.com/css2?family=Vollkorn:wght@400;600;700&family=DM+Mono:wght@400;500&family=Onest:wght@400;500;600&display=swap');
+
   * {{ margin: 0; padding: 0; box-sizing: border-box; }}
-  body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-         background: #f8f9fa; color: #212529; padding: 2rem; line-height: 1.5; }}
-  .container {{ max-width: 1200px; margin: 0 auto; }}
-  h1 {{ font-size: 1.5rem; margin-bottom: 0.5rem; }}
-  .meta {{ color: #6c757d; font-size: 0.875rem; margin-bottom: 2rem; }}
-  .summary {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-              gap: 1rem; margin-bottom: 2rem; }}
-  .stat-card {{ background: #fff; border-radius: 8px; padding: 1rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }}
-  .stat-card .label {{ font-size: 0.75rem; color: #6c757d; text-transform: uppercase; letter-spacing: 0.05em; }}
-  .stat-card .value {{ font-size: 1.5rem; font-weight: 600; }}
-  .table-section {{ background: #fff; border-radius: 8px; padding: 1.5rem; margin-bottom: 1.5rem;
-                    box-shadow: 0 1px 3px rgba(0,0,0,0.1); }}
-  .table-section h2 {{ font-size: 1.1rem; margin-bottom: 0.25rem; }}
-  .table-meta {{ color: #6c757d; font-size: 0.8rem; margin-bottom: 1rem; }}
-  table {{ width: 100%; border-collapse: collapse; font-size: 0.85rem; }}
-  th {{ background: #f1f3f5; text-align: left; padding: 0.5rem; border-bottom: 2px solid #dee2e6;
-       font-weight: 600; white-space: nowrap; }}
-  td {{ padding: 0.5rem; border-bottom: 1px solid #f1f3f5; }}
-  tr:hover td {{ background: #f8f9fa; }}
-  .anomaly {{ display: inline-block; background: #fff3cd; color: #856404; padding: 0.1rem 0.4rem;
-              border-radius: 4px; font-size: 0.75rem; margin-right: 0.25rem; }}
-  .error {{ color: #dc3545; }}
-  .type-badge {{ display: inline-block; background: #e9ecef; padding: 0.1rem 0.4rem;
-                 border-radius: 4px; font-size: 0.75rem; font-family: monospace; }}
-  .null-bar {{ display: inline-block; width: 60px; height: 8px; background: #e9ecef;
-               border-radius: 4px; overflow: hidden; vertical-align: middle; }}
-  .null-bar-fill {{ height: 100%; border-radius: 4px; }}
-  .null-low {{ background: #28a745; }}
-  .null-med {{ background: #ffc107; }}
-  .null-high {{ background: #dc3545; }}
-  .pattern-badge {{ display: inline-block; background: #d4edda; color: #155724; padding: 0.1rem 0.4rem;
-                    border-radius: 4px; font-size: 0.75rem; margin-right: 0.25rem; margin-bottom: 0.15rem; }}
-  .constraint-info {{ margin-top: 0.75rem; font-size: 0.8rem; color: #495057; }}
-  .constraint-info span {{ margin-right: 1rem; }}
-  .constraint-tag {{ display: inline-block; background: #cce5ff; color: #004085; padding: 0.1rem 0.4rem;
-                     border-radius: 4px; font-size: 0.75rem; margin-right: 0.25rem; }}
-  .fk-tag {{ background: #e2d9f3; color: #4a235a; }}
-  .rel-section {{ background: #fff; border-radius: 8px; padding: 1.5rem; margin-bottom: 1.5rem;
-                  box-shadow: 0 1px 3px rgba(0,0,0,0.1); }}
-  .rel-section h2 {{ font-size: 1.1rem; margin-bottom: 1rem; }}
-  .rel-badge {{ display: inline-block; padding: 0.15rem 0.5rem; border-radius: 4px;
-                font-size: 0.75rem; font-weight: 600; }}
-  .rel-declared {{ background: #cce5ff; color: #004085; }}
-  .rel-inferred {{ background: #d4edda; color: #155724; }}
+
+  body {{
+    font-family: 'Onest', system-ui, sans-serif;
+    background: #F7F4EE;
+    color: #1E1A15;
+    padding: 3rem 2rem;
+    line-height: 1.55;
+  }}
+
+  .container {{ max-width: 1340px; margin: 0 auto; }}
+
+  h1 {{
+    font-family: 'Vollkorn', Georgia, serif;
+    font-size: 1.6rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    color: #0F0D09;
+    margin-bottom: 0.4rem;
+  }}
+
+  .meta {{
+    font-family: 'DM Mono', Consolas, monospace;
+    color: #8A7B6A;
+    font-size: 0.72rem;
+    margin-bottom: 2.5rem;
+    letter-spacing: 0.04em;
+    border-bottom: 1px solid #E0D9CF;
+    padding-bottom: 1.5rem;
+  }}
+
+  .summary {{
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+    gap: 0.75rem;
+    margin-bottom: 2.5rem;
+  }}
+
+  .stat-card {{
+    background: #FFFFFF;
+    border: 1px solid #E0D9CF;
+    border-top: 3px solid #C8B89A;
+    padding: 1rem 1.1rem;
+  }}
+
+  .stat-card .label {{
+    font-family: 'DM Mono', Consolas, monospace;
+    font-size: 0.6rem;
+    color: #8A7B6A;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    margin-bottom: 0.4rem;
+  }}
+
+  .stat-card .value {{
+    font-family: 'Vollkorn', Georgia, serif;
+    font-size: 1.75rem;
+    font-weight: 700;
+    color: #0F0D09;
+    letter-spacing: -0.04em;
+  }}
+
+  .table-section {{
+    background: #FFFFFF;
+    border: 1px solid #E0D9CF;
+    padding: 1.5rem;
+    margin-bottom: 1.25rem;
+  }}
+
+  .table-section h2 {{
+    font-family: 'Vollkorn', Georgia, serif;
+    font-size: 1.05rem;
+    font-weight: 700;
+    margin-bottom: 0.2rem;
+    color: #0F0D09;
+    letter-spacing: -0.01em;
+  }}
+
+  .table-meta {{
+    font-family: 'DM Mono', Consolas, monospace;
+    color: #8A7B6A;
+    font-size: 0.68rem;
+    margin-bottom: 1.1rem;
+    letter-spacing: 0.02em;
+  }}
+
+  table {{
+    width: 100%;
+    border-collapse: collapse;
+    font-family: 'DM Mono', Consolas, monospace;
+    font-size: 0.75rem;
+  }}
+
+  th {{
+    background: #F0EDE6;
+    text-align: left;
+    padding: 0.55rem 0.75rem;
+    border-bottom: 2px solid #D8D0C5;
+    font-family: 'DM Mono', Consolas, monospace;
+    font-weight: 500;
+    font-size: 0.6rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: #6B5E50;
+    white-space: nowrap;
+  }}
+
+  td {{
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid #F0EDE6;
+    color: #2C2620;
+  }}
+
+  tr:hover td {{ background: #FAF7F2; }}
+
+  .anomaly {{
+    display: inline-block;
+    background: rgba(217,119,6,0.1);
+    color: #92400E;
+    padding: 0.1rem 0.35rem;
+    border-radius: 2px;
+    font-family: 'DM Mono', Consolas, monospace;
+    font-size: 0.65rem;
+    margin-right: 0.2rem;
+    margin-bottom: 0.15rem;
+  }}
+
+  .error {{ color: #B91C1C; font-family: 'DM Mono', Consolas, monospace; font-size: 0.8rem; }}
+
+  .type-badge {{
+    display: inline-block;
+    background: #EDE9E0;
+    padding: 0.1rem 0.4rem;
+    border-radius: 2px;
+    font-size: 0.65rem;
+    font-family: 'DM Mono', Consolas, monospace;
+    color: #6B5E50;
+    border: 1px solid #D8D0C5;
+  }}
+
+  .null-bar {{
+    display: inline-block;
+    width: 56px;
+    height: 5px;
+    background: #E8E2D8;
+    overflow: hidden;
+    vertical-align: middle;
+  }}
+
+  .null-bar-fill {{ height: 100%; }}
+  .null-low {{ background: #059669; }}
+  .null-med {{ background: #D97706; }}
+  .null-high {{ background: #B91C1C; }}
+
+  .pattern-badge {{
+    display: inline-block;
+    background: rgba(109,40,217,0.08);
+    color: #5B21B6;
+    padding: 0.1rem 0.35rem;
+    border-radius: 2px;
+    font-family: 'DM Mono', Consolas, monospace;
+    font-size: 0.65rem;
+    margin-right: 0.2rem;
+    margin-bottom: 0.15rem;
+  }}
+
+  .constraint-info {{ margin-top: 0.75rem; font-size: 0.75rem; }}
+  .constraint-info span {{ margin-right: 0.75rem; }}
+
+  .constraint-tag {{
+    display: inline-block;
+    background: rgba(37,99,235,0.08);
+    color: #1D4ED8;
+    padding: 0.1rem 0.4rem;
+    border-radius: 2px;
+    font-family: 'DM Mono', Consolas, monospace;
+    font-size: 0.65rem;
+    margin-right: 0.2rem;
+  }}
+
+  .fk-tag {{ background: rgba(109,40,217,0.08); color: #5B21B6; }}
+
+  .rel-section {{
+    background: #FFFFFF;
+    border: 1px solid #E0D9CF;
+    padding: 1.5rem;
+    margin-bottom: 1.25rem;
+  }}
+
+  .rel-section h2 {{
+    font-family: 'Vollkorn', Georgia, serif;
+    font-size: 1.05rem;
+    font-weight: 700;
+    margin-bottom: 1rem;
+    color: #0F0D09;
+  }}
+
+  .rel-badge {{
+    display: inline-block;
+    padding: 0.1rem 0.45rem;
+    border-radius: 2px;
+    font-family: 'DM Mono', Consolas, monospace;
+    font-size: 0.62rem;
+    font-weight: 500;
+    letter-spacing: 0.03em;
+  }}
+
+  .rel-declared {{ background: rgba(37,99,235,0.08); color: #1D4ED8; }}
+  .rel-inferred {{ background: rgba(5,150,105,0.08); color: #047857; }}
 </style>
 </head>
 <body>

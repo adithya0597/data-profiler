@@ -282,7 +282,7 @@ class TestUXFeatures:
 
         content = Path(out).read_text()
         assert '[data-theme="light"]' in content
-        assert "--bg: #f8f9fa" in content
+        assert "--bg: #F3F0E8" in content
 
     def test_print_css(self, tmp_path):
         """C1: Print stylesheet hides sidebar and shows all pages."""
