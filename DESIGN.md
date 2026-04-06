@@ -37,15 +37,9 @@ CLI (cli.py)
         └── dashboard.py   — 8-section interactive dark-theme dashboard
 ```
 
-### Key decision: single SQL pass per table
+### Key decision: batched aggregate query per table
 
-All column statistics for a table are computed in **one SQL query** (per sampling tier). The `AGGREGATE_MAP` in `stats_worker.py` dispatches type-aware expression templates, concatenates them into a single `SELECT`, and executes once. This means:
-
-- Network round-trips are minimized (critical for remote engines like Snowflake/Databricks)
-- The query optimizer sees the full projection and can share scans
-- Sampling is applied once at the `FROM` clause level, not per-column
-
-The tradeoff: the query can be wide (400+ expressions for large tables). In practice, every engine tested handles this without issue.
+Core column statistics (null counts, min/max, mean, stddev, percentiles) are computed in a **single aggregate query** per table. The `AGGREGATE_MAP` dispatches type-aware SQL expressions, concatenates them into one `SELECT`, and executes once per batch. This minimizes network round-trips for the heaviest computation. Distinct counts run as a separate full-table HLL query when sampling is active. Distribution analysis (histograms, Benford's Law, correlations) and per-column queries (top-N values, uniqueness counts) run as follow-up passes. The tradeoff favors correctness (HLL on full data, not the sample) and modularity (each analysis can be toggled independently) over minimizing total query count.
 
 ### Why not an ORM?
 

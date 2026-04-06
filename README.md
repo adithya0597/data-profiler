@@ -1,13 +1,13 @@
 # Multi-Engine Data Profiler
 
-Extracts statistical metadata from databases for data quality analysis and knowledge graph enrichment. Profiles tables across **Snowflake**, **Databricks**, **DuckDB**, and **SQLite** in a single pass, producing structured output consumable by data catalogs, lineage systems, and constraint engines.
+Extracts statistical metadata from databases for data quality analysis and knowledge graph enrichment. Profiles tables across **Snowflake**, **Databricks**, **DuckDB**, and **SQLite**, producing structured output consumable by data catalogs, lineage systems, and constraint engines.
 
 ## Feature Highlights
 
 ### Schema Intelligence
 - **8 canonical types** normalize across engine vocabularies — `TIMESTAMP_NTZ`, `TIMESTAMPTZ`, and `DATETIME` all map to `datetime`, enabling cross-engine metadata comparison
 - **FK relationship inference** — discovers foreign key relationships statistically from column names, types, cardinality, and value overlap (no DDL access required)
-- **Constraint suggestions** — derives `NOT NULL`, `UNIQUE`, `CHECK` range, and `REFERENCES` recommendations from observed data distributions
+- **Constraint suggestions** — derives `NOT NULL`, `UNIQUE`, and `CHECK` range recommendations from observed data distributions
 - **Functional dependency detection** — identifies columns that determine other columns within a table
 
 ### Statistical Depth
@@ -60,15 +60,15 @@ data_profiler/
 │   └── sqlite.py           # Exact COUNT(DISTINCT), Python-side stddev/percentiles
 ├── workers/
 │   ├── schema_worker.py    # Table/column discovery via SQLAlchemy Inspector
-│   ├── stats_worker.py     # Type-aware aggregate dispatch, single SQL pass per table
+│   ├── stats_worker.py     # Type-aware aggregate dispatch, batched stats queries per table
 │   └── relationship_worker.py  # FK inference via name + cardinality + value overlap
 ├── schema/
 │   └── portable_types.py   # 8 canonical types with cross-engine type mapping
 ├── enrichment/
 │   ├── anomaly.py          # 19 rule-based anomaly flags
 │   ├── patterns.py         # PII and semantic pattern detection (regex-based)
-│   ├── constraint_suggester.py  # NOT NULL / UNIQUE / CHECK / FK recommendations
-│   └── constraints.py      # Functional dependency and PK candidate detection
+│   ├── constraint_suggester.py  # NOT NULL / UNIQUE / CHECK range recommendations
+│   └── constraints.py      # Declared PK, FK, UNIQUE, CHECK constraint discovery via Inspector
 ├── persistence/
 │   ├── checkpoint.py       # SQLite-based resume support (crash recovery)
 │   ├── serializers.py      # NDJSON, YAML, Parquet, CSV serializers
@@ -82,7 +82,7 @@ data_profiler/
 
 ### Key Design Decisions
 
-**Single SQL pass.** One `SELECT` per table computes all column statistics in a single round-trip. For tables with >80 columns, queries are batched to stay under Snowflake's expression limits. This minimizes network round-trips to remote engines and lets the query optimizer share scans.
+**Batched aggregate query.** Core column statistics (min, max, mean, stddev, null count, percentiles) are computed in a single `SELECT` per table, batched for wide tables. Distinct counts run as a separate full-table HLL query when sampling is active. Distribution analysis (histograms, Benford, correlations) and per-column value queries (top-N, uniqueness) run as follow-up queries after the main aggregate pass.
 
 **Type-aware aggregate dispatch.** `AGGREGATE_MAP` in `stats_worker.py` maps each canonical type to valid SQL expressions. No `AVG` on strings, no `STDDEV` on booleans. Avoids silently computing meaningless values.
 
