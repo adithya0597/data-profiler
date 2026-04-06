@@ -128,9 +128,13 @@ TABLE_SECTION_TEMPLATE = """
           <th>Min</th>
           <th>Max</th>
           <th>Mean</th>
+          <th>Stddev</th>
           <th>Median</th>
+          <th>p25 / p75</th>
+          <th>IQR</th>
           <th>Skew</th>
           <th>Kurt</th>
+          <th>Extra</th>
           <th>Benford</th>
           <th>Patterns</th>
           <th>Anomalies</th>
@@ -184,8 +188,46 @@ def _benford_badge(col: dict) -> str:
     return '<span style="color:#dc3545;font-weight:600">Anomaly</span>'
 
 
+def _column_extra(col: dict) -> str:
+    """Type-specific supplementary stats for the Extra column."""
+    ct = col.get("canonical_type", "")
+    parts = []
+    if ct in ("integer", "float"):
+        if col.get("sum") is not None:
+            parts.append(f"sum={_fmt(col['sum'])}")
+        if col.get("zero_count"):
+            parts.append(f"zeros={col['zero_count']:,}")
+        if col.get("negative_count"):
+            parts.append(f"neg={col['negative_count']:,}")
+        if col.get("unique_count") is not None:
+            ratio = col.get("uniqueness_ratio")
+            ratio_str = f" ({ratio:.1%})" if ratio is not None else ""
+            parts.append(f"singletons={col['unique_count']:,}{ratio_str}")
+    elif ct == "boolean":
+        if col.get("true_count") is not None:
+            rate = col.get("true_rate")
+            rate_str = f" ({rate:.1%})" if rate is not None else ""
+            parts.append(f"true={col['true_count']:,}{rate_str}")
+    elif ct == "string":
+        if col.get("empty_count"):
+            parts.append(f"empty={col['empty_count']:,}")
+        if col.get("leading_trailing_whitespace_count"):
+            parts.append(f"ltws={col['leading_trailing_whitespace_count']:,}")
+        if col.get("min_length") is not None:
+            parts.append(f"len={col['min_length']}–{col.get('max_length', '?')}")
+    elif ct in ("date", "datetime"):
+        if col.get("date_range_days") is not None:
+            parts.append(f"span={col['date_range_days']}d")
+        if col.get("granularity_guess") and col["granularity_guess"] != "unknown":
+            parts.append(f"gran={col['granularity_guess']}")
+    return html_lib.escape(", ".join(parts)) if parts else "—"
+
+
 def _column_row(col: dict) -> str:
     anomalies_html = " ".join(f'<span class="anomaly">{html_lib.escape(str(a))}</span>' for a in col.get("anomalies", []))
+    p25 = col.get("p25")
+    p75 = col.get("p75")
+    p25p75 = f"{_fmt(p25)} / {_fmt(p75)}" if p25 is not None or p75 is not None else "—"
     return (
         f"<tr>"
         f"<td><strong>{html_lib.escape(str(col['name']))}</strong></td>"
@@ -196,9 +238,13 @@ def _column_row(col: dict) -> str:
         f"<td>{_fmt(col.get('min'))}</td>"
         f"<td>{_fmt(col.get('max'))}</td>"
         f"<td>{_fmt(col.get('mean'))}</td>"
+        f"<td>{_fmt(col.get('stddev'))}</td>"
         f"<td>{_fmt(col.get('median'))}</td>"
+        f"<td>{p25p75}</td>"
+        f"<td>{_fmt(col.get('iqr'))}</td>"
         f"<td>{_fmt(col.get('skewness'))}</td>"
         f"<td>{_fmt(col.get('kurtosis'))}</td>"
+        f"<td>{_column_extra(col)}</td>"
         f"<td>{_benford_badge(col)}</td>"
         f"<td>{_pattern_badges(col)}</td>"
         f"<td>{anomalies_html or '—'}</td>"

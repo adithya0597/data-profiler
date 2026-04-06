@@ -48,9 +48,9 @@ def _check_value_overlap(
 
     sql = text(f"""
         SELECT COUNT(*) AS cnt FROM (
-            SELECT {qcol} FROM {q1} WHERE {qcol} IS NOT NULL LIMIT :lim
+            SELECT {qcol} FROM (SELECT {qcol} FROM {q1} WHERE {qcol} IS NOT NULL LIMIT :lim) _a
             INTERSECT
-            SELECT {qcol} FROM {q2} WHERE {qcol} IS NOT NULL LIMIT :lim
+            SELECT {qcol} FROM (SELECT {qcol} FROM {q2} WHERE {qcol} IS NOT NULL LIMIT :lim) _b
         ) AS _overlap
     """)
 

@@ -1120,14 +1120,32 @@ function renderTableDetail(tableName) {
     var madCell = c.mad != null ? c.mad.toFixed(4) : '\u2014';
     var cvCell = c.cv != null ? (c.cv * 100).toFixed(1) + '%' : '\u2014';
     var extras = [];
-    if (c.canonical_type === 'string') {
-      if (c.min_length != null) extras.push('minLen: ' + c.min_length);
-      if (c.whitespace_count != null && c.whitespace_count > 0) extras.push('wsp: ' + c.whitespace_count);
-    } else if (c.canonical_type === 'float') {
+    if (c.canonical_type === 'integer' || c.canonical_type === 'float') {
+      if (c.sum != null) extras.push('sum: ' + fmt(c.sum));
+      if (c.p25 != null && c.p75 != null) extras.push('p25/p75: ' + fmt(c.p25) + ' / ' + fmt(c.p75));
+      if (c.p5 != null && c.p95 != null) extras.push('p5/p95: ' + fmt(c.p5) + ' / ' + fmt(c.p95));
+      if (c.iqr != null) extras.push('IQR: ' + fmt(c.iqr));
+      if (c.zero_count != null && c.zero_count > 0) extras.push('zeros: ' + c.zero_count);
+      if (c.negative_count != null && c.negative_count > 0) extras.push('neg: ' + c.negative_count);
+      if (c.unique_count != null) extras.push('singletons: ' + c.unique_count + (c.uniqueness_ratio != null ? ' (' + (c.uniqueness_ratio * 100).toFixed(1) + '%)' : ''));
+    }
+    if (c.canonical_type === 'float') {
       if (c.infinite_count != null && c.infinite_count > 0) extras.push('\u221e: ' + c.infinite_count);
+    }
+    if (c.canonical_type === 'string') {
+      if (c.min_length != null) extras.push('len: ' + c.min_length + '\u2013' + c.max_length);
+      if (c.empty_count != null && c.empty_count > 0) extras.push('empty: ' + c.empty_count);
+      if (c.whitespace_count != null && c.whitespace_count > 0) extras.push('wsp: ' + c.whitespace_count);
+      if (c.leading_trailing_whitespace_count != null && c.leading_trailing_whitespace_count > 0) extras.push('ltws: ' + c.leading_trailing_whitespace_count);
+      if (c.unique_count != null) extras.push('singletons: ' + c.unique_count);
+    }
+    if (c.canonical_type === 'boolean') {
+      if (c.true_count != null) extras.push('true: ' + c.true_count + (c.true_rate != null ? ' (' + (c.true_rate * 100).toFixed(1) + '%)' : ''));
     }
     if (c.canonical_type === 'date' || c.canonical_type === 'datetime') {
       if (c.freshness_days != null) extras.push('fresh: ' + Math.round(c.freshness_days) + 'd');
+      if (c.date_range_days != null) extras.push('span: ' + c.date_range_days + 'd');
+      if (c.granularity_guess && c.granularity_guess !== 'unknown') extras.push('gran: ' + c.granularity_guess);
     }
     if (c.is_monotonic_increasing) extras.push('mono:\u2191');
     else if (c.is_monotonic_decreasing) extras.push('mono:\u2193');
@@ -1183,6 +1201,10 @@ function renderTableDetail(tableName) {
     + '<th>Extras</th><th>Patterns</th><th>Anomalies</th><th>Top Values</th><th>Bottom Values</th>'
     + '</tr></thead><tbody>' + colRows + '</tbody></table></div>'
     + histogramSection(t)
+    + cdfSection(t)
+    + boxPlotSection(t)
+    + lengthHistogramSection(t)
+    + qqPlotSection(t)
     + benfordSection(t)
     + constraintSuggestSection(t)
     + '</div>'
@@ -1282,6 +1304,122 @@ function constraintSuggestSection(t) {
   return '<div style="margin-top:1.5rem"><h4 style="margin-bottom:0.75rem">Suggested Constraints</h4>'
     + '<div class="scroll-x"><table><thead><tr><th>Column</th><th>Type</th><th>Expression</th><th>Confidence</th><th>Evidence</th></tr></thead>'
     + '<tbody>' + rows + '</tbody></table></div></div>';
+}
+
+function cdfSection(t) {
+  var cols = (t.columns || []).filter(function(c) { return c.cdf && c.cdf.length > 1; });
+  if (cols.length === 0) return '';
+  var W = 300, H = 80;
+  var charts = cols.map(function(c) {
+    var xMin = c.cdf[0].x, xMax = c.cdf[c.cdf.length - 1].x;
+    var xRange = xMax - xMin || 1;
+    var pts = c.cdf.map(function(p) {
+      var sx = ((p.x - xMin) / xRange * W).toFixed(1);
+      var sy = (H - p.cumulative_pct * (H - 4)).toFixed(1);
+      return sx + ',' + sy;
+    }).join(' ');
+    return '<div style="flex:1;min-width:180px;max-width:280px">'
+      + '<div style="font-size:0.75rem;font-weight:600;margin-bottom:0.4rem">' + esc(c.name) + '</div>'
+      + '<svg viewBox="0 0 ' + W + ' ' + H + '" style="width:100%;height:80px;border-bottom:1px solid var(--border)" preserveAspectRatio="none">'
+      + '<polyline points="' + pts + '" fill="none" stroke="var(--accent)" stroke-width="1.8" stroke-linejoin="round"/>'
+      + '</svg>'
+      + '<div style="font-size:0.55rem;color:var(--text-dim);display:flex;justify-content:space-between"><span>' + (typeof xMin === 'number' ? xMin.toFixed(1) : xMin) + '</span><span>' + (typeof xMax === 'number' ? xMax.toFixed(1) : xMax) + '</span></div>'
+      + '</div>';
+  }).join('');
+  return '<div style="margin-top:1.5rem"><h4 style="margin-bottom:0.75rem">Cumulative Distribution (CDF)</h4>'
+    + '<div style="display:flex;flex-wrap:wrap;gap:1.5rem">' + charts + '</div></div>';
+}
+
+function boxPlotSection(t) {
+  var cols = (t.columns || []).filter(function(c) { return c.box_plot && c.box_plot.q1 != null; });
+  if (cols.length === 0) return '';
+  var charts = cols.map(function(c) {
+    var bp = c.box_plot;
+    var lo = bp.lower_whisker != null ? bp.lower_whisker : bp.q1;
+    var hi = bp.upper_whisker != null ? bp.upper_whisker : bp.q3;
+    var range = hi - lo || 1;
+    var W = 260, H = 40;
+    function sx(v) { return ((v - lo) / range * W).toFixed(1); }
+    var boxX1 = sx(bp.q1), boxX2 = sx(bp.q3), medX = sx(bp.median);
+    var boxW = Math.max(parseFloat(boxX2) - parseFloat(boxX1), 2);
+    var whiskerL = Math.max(sx(lo), 0), whiskerR = Math.min(sx(hi), W);
+    var midY = (H / 2).toFixed(1);
+    var outlierDots = (bp.outliers || []).slice(0, 20).map(function(v) {
+      var ox = sx(v);
+      if (ox < 0 || ox > W) return '';
+      return '<circle cx="' + ox + '" cy="' + midY + '" r="2" fill="var(--red)" opacity="0.7"/>';
+    }).join('');
+    var svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" style="width:100%;height:' + H + 'px" preserveAspectRatio="none">'
+      + '<line x1="' + whiskerL + '" y1="' + midY + '" x2="' + whiskerR + '" y2="' + midY + '" stroke="var(--text-dim)" stroke-width="1"/>'
+      + '<line x1="' + whiskerL + '" y1="10" x2="' + whiskerL + '" y2="30" stroke="var(--text-dim)" stroke-width="1"/>'
+      + '<line x1="' + whiskerR + '" y1="10" x2="' + whiskerR + '" y2="30" stroke="var(--text-dim)" stroke-width="1"/>'
+      + '<rect x="' + boxX1 + '" y="10" width="' + boxW + '" height="20" fill="var(--accent)" opacity="0.35" stroke="var(--accent)" stroke-width="1"/>'
+      + '<line x1="' + medX + '" y1="10" x2="' + medX + '" y2="30" stroke="var(--accent)" stroke-width="2"/>'
+      + outlierDots
+      + '</svg>';
+    return '<div style="flex:1;min-width:180px;max-width:300px">'
+      + '<div style="font-size:0.75rem;font-weight:600;margin-bottom:0.3rem">' + esc(c.name) + '</div>'
+      + svg
+      + '<div style="font-size:0.6rem;color:var(--text-dim);display:flex;justify-content:space-between;margin-top:2px">'
+      + '<span>Q1: ' + (bp.q1 != null ? bp.q1.toFixed(2) : '\u2014') + '</span>'
+      + '<span>Med: ' + (bp.median != null ? bp.median.toFixed(2) : '\u2014') + '</span>'
+      + '<span>Q3: ' + (bp.q3 != null ? bp.q3.toFixed(2) : '\u2014') + '</span>'
+      + '</div></div>';
+  }).join('');
+  return '<div style="margin-top:1.5rem"><h4 style="margin-bottom:0.75rem">Box Plots <span style="font-size:0.7rem;color:var(--text-dim);font-weight:400">(red dots = outliers beyond Tukey fences)</span></h4>'
+    + '<div style="display:flex;flex-wrap:wrap;gap:1.5rem">' + charts + '</div></div>';
+}
+
+function lengthHistogramSection(t) {
+  var cols = (t.columns || []).filter(function(c) { return c.length_histogram && c.length_histogram.length > 0; });
+  if (cols.length === 0) return '';
+  var charts = cols.map(function(c) {
+    var maxCount = Math.max.apply(null, c.length_histogram.map(function(b) { return b.count; }));
+    var bars = c.length_histogram.map(function(b) {
+      var h = maxCount > 0 ? (b.count / maxCount * 100) : 0;
+      return '<div style="display:flex;align-items:end;flex-direction:column;flex:1;gap:1px" title="len=' + b.length + ': ' + b.count + '">'
+        + '<div style="width:100%;background:rgba(100,200,255,0.6);border-radius:1px 1px 0 0;height:' + Math.max(h, 2) + '%;min-height:2px"></div>'
+        + '<div style="font-size:0.5rem;color:var(--text-dim);text-align:center">' + b.length + '</div>'
+        + '</div>';
+    }).join('');
+    return '<div style="flex:1;min-width:160px;max-width:280px">'
+      + '<div style="font-size:0.75rem;font-weight:600;margin-bottom:0.4rem">' + esc(c.name) + '</div>'
+      + '<div style="display:flex;align-items:end;height:64px;gap:1px;border-bottom:1px solid var(--border)">' + bars + '</div>'
+      + '</div>';
+  }).join('');
+  return '<div style="margin-top:1.5rem"><h4 style="margin-bottom:0.75rem">String Length Distribution</h4>'
+    + '<div style="display:flex;flex-wrap:wrap;gap:1.5rem">' + charts + '</div></div>';
+}
+
+function qqPlotSection(t) {
+  var cols = (t.columns || []).filter(function(c) { return c.qq_plot && c.qq_plot.length > 1; });
+  if (cols.length === 0) return '';
+  var W = 140, H = 100;
+  var charts = cols.map(function(c) {
+    var pts = c.qq_plot;
+    var theoPts = pts.map(function(p) { return p.theoretical; });
+    var actPts  = pts.map(function(p) { return p.actual; });
+    var tMin = Math.min.apply(null, theoPts), tMax = Math.max.apply(null, theoPts);
+    var aMin = Math.min.apply(null, actPts), aMax = Math.max.apply(null, actPts);
+    var tRange = tMax - tMin || 1, aRange = aMax - aMin || 1;
+    var dots = pts.map(function(p) {
+      var sx = ((p.theoretical - tMin) / tRange * (W - 8) + 4).toFixed(1);
+      var sy = (H - 4 - (p.actual - aMin) / aRange * (H - 8)).toFixed(1);
+      return '<circle cx="' + sx + '" cy="' + sy + '" r="2" fill="var(--accent)" opacity="0.7"/>';
+    }).join('');
+    // Reference line: map (tMin,aMin)→(tMax,aMax)
+    var refX1 = '4', refY1 = (H - 4).toFixed(1), refX2 = (W - 4).toFixed(1), refY2 = '4';
+    return '<div style="flex:1;min-width:150px;max-width:220px">'
+      + '<div style="font-size:0.75rem;font-weight:600;margin-bottom:0.3rem">' + esc(c.name) + '</div>'
+      + '<svg viewBox="0 0 ' + W + ' ' + H + '" style="width:100%;height:' + H + 'px;border:1px solid var(--border);border-radius:4px" preserveAspectRatio="none">'
+      + '<line x1="' + refX1 + '" y1="' + refY1 + '" x2="' + refX2 + '" y2="' + refY2 + '" stroke="var(--text-dim)" stroke-width="0.8" stroke-dasharray="3,2"/>'
+      + dots
+      + '</svg>'
+      + '<div style="font-size:0.55rem;color:var(--text-dim);margin-top:2px;text-align:center">Theoretical \u2192 (normal) | dots on line = normal</div>'
+      + '</div>';
+  }).join('');
+  return '<div style="margin-top:1.5rem"><h4 style="margin-bottom:0.75rem">Q-Q Normality Plots <span style="font-size:0.7rem;color:var(--text-dim);font-weight:400">(dots on dashed line = normally distributed)</span></h4>'
+    + '<div style="display:flex;flex-wrap:wrap;gap:1.5rem">' + charts + '</div></div>';
 }
 
 // ============================================================
