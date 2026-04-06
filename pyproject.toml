@@ -20,13 +20,11 @@ dependencies = [
 snowflake = ["snowflake-sqlalchemy>=1.5"]
 databricks = ["databricks-sql-connector>=3.0", "sqlalchemy-databricks>=0.2"]
 parquet = ["pyarrow>=14.0"]
-html = ["jinja2>=3.1"]
 all = [
     "snowflake-sqlalchemy>=1.5",
     "databricks-sql-connector>=3.0",
     "sqlalchemy-databricks>=0.2",
     "pyarrow>=14.0",
-    "jinja2>=3.1",
 ]
 dev = ["pytest>=7.0", "pytest-cov>=4.0"]
 
