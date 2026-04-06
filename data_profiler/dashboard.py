@@ -65,55 +65,55 @@ _DASHBOARD_HTML = r"""<!DOCTYPE html>
 <title>Data Profiler Dashboard</title>
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src data:;">
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=Onest:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap');
 
 :root {
-  --bg: #070B12;
-  --bg-card: #0D1320;
-  --bg-card-hover: #121B2E;
-  --bg-sidebar: #080D18;
-  --border: #1A2D45;
-  --text: #C8D4E8;
-  --text-dim: #4B5F7A;
-  --text-bright: #EDF2F9;
-  --accent: #10B981;
-  --accent-light: #34D399;
-  --green: #10B981;
-  --green-bg: rgba(16,185,129,0.1);
-  --yellow: #FBBF24;
-  --yellow-bg: rgba(251,191,36,0.1);
-  --red: #F43F5E;
-  --red-bg: rgba(244,63,94,0.1);
+  --bg: #111827;
+  --bg-card: #1F2937;
+  --bg-card-hover: #273548;
+  --bg-sidebar: #111827;
+  --border: #374151;
+  --text: #D1D5DB;
+  --text-dim: #6B7280;
+  --text-bright: #F9FAFB;
+  --accent: #3B82F6;
+  --accent-light: #60A5FA;
+  --green: #22C55E;
+  --green-bg: rgba(34,197,94,0.1);
+  --yellow: #F59E0B;
+  --yellow-bg: rgba(245,158,11,0.1);
+  --red: #EF4444;
+  --red-bg: rgba(239,68,68,0.1);
   --blue: #3B82F6;
   --blue-bg: rgba(59,130,246,0.1);
   --purple: #8B5CF6;
   --purple-bg: rgba(139,92,246,0.1);
-  --orange: #FB923C;
-  --cyan: #22D3EE;
-  --bg-hover: rgba(16,185,129,0.04);
-  --bg-active: rgba(16,185,129,0.08);
-  --border-subtle: rgba(26,45,69,0.7);
-  --bg-subtle: rgba(16,185,129,0.03);
+  --orange: #F97316;
+  --cyan: #06B6D4;
+  --bg-hover: rgba(59,130,246,0.04);
+  --bg-active: rgba(59,130,246,0.08);
+  --border-subtle: rgba(55,65,81,0.7);
+  --bg-subtle: rgba(59,130,246,0.03);
   --bg-track: rgba(255,255,255,0.06);
   --bg-track-alt: rgba(255,255,255,0.04);
-  --font-display: 'Syne', system-ui, sans-serif;
-  --font-ui: 'Onest', system-ui, sans-serif;
+  --font-display: 'Inter', system-ui, sans-serif;
+  --font-ui: 'Inter', system-ui, sans-serif;
   --font-mono: 'DM Mono', 'SF Mono', Consolas, monospace;
 }
 
 [data-theme="light"] {
-  --bg: #F3F0E8;
+  --bg: #F9FAFB;
   --bg-card: #FFFFFF;
-  --bg-card-hover: #F8F5EE;
-  --bg-sidebar: #EAE7DE;
-  --border: #D0CAC0;
-  --text: #2A2722;
-  --text-dim: #8A7B6A;
-  --text-bright: #18150F;
-  --accent: #0D9668;
-  --accent-light: #10B981;
-  --green: #0D9668;
-  --green-bg: rgba(13,150,104,0.1);
+  --bg-card-hover: #F3F4F6;
+  --bg-sidebar: #F3F4F6;
+  --border: #E5E7EB;
+  --text: #374151;
+  --text-dim: #9CA3AF;
+  --text-bright: #111827;
+  --accent: #2563EB;
+  --accent-light: #3B82F6;
+  --green: #16A34A;
+  --green-bg: rgba(22,163,74,0.1);
   --yellow: #D97706;
   --yellow-bg: rgba(217,119,6,0.1);
   --red: #DC2626;
@@ -125,7 +125,7 @@ _DASHBOARD_HTML = r"""<!DOCTYPE html>
   --orange: #EA580C;
   --cyan: #0891B2;
   --bg-hover: rgba(0,0,0,0.04);
-  --bg-active: rgba(13,150,104,0.08);
+  --bg-active: rgba(37,99,235,0.08);
   --border-subtle: rgba(0,0,0,0.07);
   --bg-subtle: rgba(0,0,0,0.025);
   --bg-track: rgba(0,0,0,0.08);
@@ -142,20 +142,6 @@ body {
   display: flex;
   min-height: 100vh;
   overflow-x: hidden;
-}
-
-/* Dot-grid background texture */
-body::before {
-  content: '';
-  position: fixed;
-  inset: 0;
-  background-image: radial-gradient(circle, rgba(26,45,69,0.9) 1px, transparent 1px);
-  background-size: 28px 28px;
-  pointer-events: none;
-  z-index: 0;
-}
-[data-theme="light"] body::before {
-  background-image: radial-gradient(circle, rgba(180,170,155,0.6) 1px, transparent 1px);
 }
 
 .sidebar, .main { position: relative; z-index: 1; }
@@ -323,7 +309,7 @@ body::before {
 .kpi-card:hover {
   border-color: var(--accent);
   border-top-color: var(--accent);
-  box-shadow: 0 0 0 1px rgba(16,185,129,0.1), 0 4px 20px rgba(16,185,129,0.07);
+  box-shadow: 0 0 0 1px rgba(59,130,246,0.1), 0 4px 20px rgba(59,130,246,0.07);
 }
 
 .kpi-label {
@@ -624,12 +610,15 @@ tr:hover td { background: var(--bg-hover); }
 }
 
 .bar-label {
-  width: 80px;
+  width: 130px;
   font-family: var(--font-mono);
   font-size: 0.65rem;
   color: var(--text-dim);
   text-align: right;
   flex-shrink: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .bar-track {
@@ -1170,7 +1159,10 @@ function renderTables(filter) {
     + '<div id="table-detail"></div>'
   );
 
-  document.getElementById("table-search").addEventListener("input", function(e) { renderTables(e.target.value); });
+  var tsInp = document.getElementById("table-search");
+  tsInp.focus();
+  tsInp.setSelectionRange(tsInp.value.length, tsInp.value.length);
+  tsInp.addEventListener("input", function(e) { renderTables(e.target.value); });
 
   el.querySelectorAll("th[data-sort]").forEach(function(th) {
     th.addEventListener("click", function() {
@@ -1571,7 +1563,10 @@ function renderColumns(filter) {
     + '</tr></thead><tbody>' + rows + '</tbody></table></div></div>'
   );
 
-  document.getElementById("col-search").addEventListener("input", function(e) { renderColumns(e.target.value); });
+  var csInp = document.getElementById("col-search");
+  csInp.focus();
+  csInp.setSelectionRange(csInp.value.length, csInp.value.length);
+  csInp.addEventListener("input", function(e) { renderColumns(e.target.value); });
 }
 
 // ============================================================
@@ -1716,30 +1711,36 @@ function renderCorrelations() {
     var lookup = {};
     pairs.forEach(function(p) { lookup[p.col1 + '|' + p.col2] = p.pearson; lookup[p.col2 + '|' + p.col1] = p.pearson; });
 
-    var cellSize = Math.min(40, Math.floor(500 / cols.length));
-    var labelW = 100;
+    var cellSize = 36;
+    var labelW = 120;
+    var topPad = 90;
     var svgW = labelW + cols.length * cellSize;
-    var svgH = 20 + cols.length * cellSize;
+    var svgH = topPad + cols.length * cellSize;
 
     var cells = '';
     cols.forEach(function(row, ri) {
       cols.forEach(function(col, ci) {
         var r = (row === col) ? 1.0 : (lookup[row + '|' + col] != null ? lookup[row + '|' + col] : null);
         var rStr = r != null ? r.toFixed(2) : 'N/A';
-        cells += '<rect x="' + (labelW + ci * cellSize) + '" y="' + (20 + ri * cellSize) + '" width="' + cellSize + '" height="' + cellSize + '" fill="' + corrColor(r) + '" stroke="var(--border)" stroke-width="0.5"><title>' + esc(row) + ' vs ' + esc(col) + ': ' + rStr + '</title></rect>';
+        cells += '<rect x="' + (labelW + ci * cellSize) + '" y="' + (topPad + ri * cellSize) + '" width="' + cellSize + '" height="' + cellSize + '" fill="' + corrColor(r) + '" stroke="var(--border)" stroke-width="0.5"><title>' + esc(row) + ' vs ' + esc(col) + ': ' + rStr + '</title></rect>';
       });
     });
 
+    // 45° slant: text-anchor="end" + rotate(+45) sends text up-left — stays within SVG bounds.
+    // Fixed cellSize=36 → maxChars=9 keeps labels readable even for wide tables.
     var colLabels = cols.map(function(c, i) {
-      return '<text x="' + (labelW + i * cellSize + cellSize / 2) + '" y="14" text-anchor="middle" font-size="9" fill="var(--text-dim)" transform="rotate(-45,' + (labelW + i * cellSize + cellSize / 2) + ',14)">' + esc(c.substring(0, 12)) + '</text>';
+      var cx = labelW + i * cellSize + cellSize / 2;
+      var ay = topPad - 4;
+      var label = c.length > 9 ? c.substring(0, 8) + '\u2026' : c;
+      return '<text x="' + cx + '" y="' + ay + '" text-anchor="end" font-size="9" fill="var(--text-dim)" transform="rotate(45 ' + cx + ' ' + ay + ')">' + esc(label) + '</text>';
     }).join('');
     var rowLabels = cols.map(function(c, i) {
-      return '<text x="' + (labelW - 4) + '" y="' + (20 + i * cellSize + cellSize / 2 + 3) + '" text-anchor="end" font-size="9" fill="var(--text-dim)">' + esc(c.substring(0, 15)) + '</text>';
+      return '<text x="' + (labelW - 4) + '" y="' + (topPad + i * cellSize + cellSize / 2 + 3) + '" text-anchor="end" font-size="9" fill="var(--text-dim)">' + esc(c.substring(0, 18)) + '</text>';
     }).join('');
 
     return '<div style="margin-bottom:2rem"><h4>' + esc(tName) + '</h4>'
-      + '<svg viewBox="0 0 ' + svgW + ' ' + svgH + '" width="100%" style="max-width:' + svgW + 'px">'
-      + colLabels + rowLabels + cells + '</svg></div>';
+      + '<div style="overflow-x:auto"><svg width="' + svgW + '" height="' + svgH + '">'
+      + colLabels + rowLabels + cells + '</svg></div></div>';
   }).join('');
 
   // Spearman table (top pairs by |spearman| not shown in heatmap — use a ranked table)
@@ -1863,20 +1864,23 @@ function renderMissing() {
       if (colNames.indexOf(r.column) === -1 && colNames.length < 20) colNames.push(r.column);
     }
   });
-  var cellSize = 28;
+  var cellSize = 36;
   var labelW = 160;
-  var labelH = 80;
+  var labelH = 75;
   var svgW = labelW + colNames.length * cellSize;
   var svgH = labelH + tableNames.length * cellSize;
   var heatmapSVG = '';
   if (tableNames.length > 0 && colNames.length > 0) {
     var rects = '';
-    // Column labels (rotated)
+    // 45° slant: text-anchor="end" + rotate(+45) sends text up-left — stays within SVG bounds.
+    // At 36px cells, horizontal projection = 9 chars × 5.5px × cos(45°) ≈ 35px ≤ 36px → no overlap.
     colNames.forEach(function(cn, ci) {
-      rects += '<text x="' + (labelW + ci * cellSize + cellSize / 2) + '" y="' + (labelH - 4) + '" '
+      var cx = labelW + ci * cellSize + cellSize / 2;
+      var ay = labelH - 4;
+      rects += '<text x="' + cx + '" y="' + ay + '" '
         + 'text-anchor="end" font-size="9" fill="var(--text)" '
-        + 'transform="rotate(-45 ' + (labelW + ci * cellSize + cellSize / 2) + ' ' + (labelH - 4) + ')">'
-        + esc(cn.length > 15 ? cn.slice(0, 14) + '\u2026' : cn) + '</text>';
+        + 'transform="rotate(45 ' + cx + ' ' + ay + ')">'
+        + esc(cn.length > 9 ? cn.slice(0, 8) + '\u2026' : cn) + '</text>';
     });
     // Table rows
     tableNames.forEach(function(tn, ti) {

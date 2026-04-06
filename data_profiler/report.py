@@ -15,220 +15,212 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com;">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline';">
 <title>Data Profile Report — {run_id}</title>
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Vollkorn:wght@400;600;700&family=DM+Mono:wght@400;500&family=Onest:wght@400;500;600&display=swap');
-
   * {{ margin: 0; padding: 0; box-sizing: border-box; }}
 
   body {{
-    font-family: 'Onest', system-ui, sans-serif;
-    background: #F7F4EE;
-    color: #1E1A15;
-    padding: 3rem 2rem;
-    line-height: 1.55;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: #F8FAFC;
+    color: #0F172A;
+    padding: 2.5rem 2rem;
+    line-height: 1.5;
   }}
 
-  .container {{ max-width: 1340px; margin: 0 auto; }}
+  .container {{ max-width: 1400px; margin: 0 auto; }}
 
   h1 {{
-    font-family: 'Vollkorn', Georgia, serif;
-    font-size: 1.6rem;
-    font-weight: 700;
-    letter-spacing: -0.02em;
-    color: #0F0D09;
-    margin-bottom: 0.4rem;
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: #0F172A;
+    margin-bottom: 0.35rem;
   }}
 
   .meta {{
-    font-family: 'DM Mono', Consolas, monospace;
-    color: #8A7B6A;
+    font-family: 'SF Mono', 'Fira Code', Consolas, monospace;
+    color: #64748B;
     font-size: 0.72rem;
-    margin-bottom: 2.5rem;
-    letter-spacing: 0.04em;
-    border-bottom: 1px solid #E0D9CF;
-    padding-bottom: 1.5rem;
+    margin-bottom: 2rem;
+    letter-spacing: 0.02em;
+    border-bottom: 1px solid #E2E8F0;
+    padding-bottom: 1.25rem;
   }}
 
   .summary {{
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
     gap: 0.75rem;
-    margin-bottom: 2.5rem;
+    margin-bottom: 2rem;
   }}
 
   .stat-card {{
     background: #FFFFFF;
-    border: 1px solid #E0D9CF;
-    border-top: 3px solid #C8B89A;
+    border: 1px solid #E2E8F0;
+    border-top: 3px solid #3B82F6;
     padding: 1rem 1.1rem;
   }}
 
   .stat-card .label {{
-    font-family: 'DM Mono', Consolas, monospace;
+    font-family: 'SF Mono', 'Fira Code', Consolas, monospace;
     font-size: 0.6rem;
-    color: #8A7B6A;
+    color: #64748B;
     text-transform: uppercase;
     letter-spacing: 0.12em;
     margin-bottom: 0.4rem;
   }}
 
   .stat-card .value {{
-    font-family: 'Vollkorn', Georgia, serif;
     font-size: 1.75rem;
     font-weight: 700;
-    color: #0F0D09;
+    color: #0F172A;
     letter-spacing: -0.04em;
   }}
 
   .table-section {{
     background: #FFFFFF;
-    border: 1px solid #E0D9CF;
+    border: 1px solid #E2E8F0;
     padding: 1.5rem;
-    margin-bottom: 1.25rem;
+    margin-bottom: 1rem;
   }}
 
   .table-section h2 {{
-    font-family: 'Vollkorn', Georgia, serif;
-    font-size: 1.05rem;
-    font-weight: 700;
+    font-size: 0.95rem;
+    font-weight: 600;
     margin-bottom: 0.2rem;
-    color: #0F0D09;
-    letter-spacing: -0.01em;
+    color: #0F172A;
   }}
 
   .table-meta {{
-    font-family: 'DM Mono', Consolas, monospace;
-    color: #8A7B6A;
+    font-family: 'SF Mono', 'Fira Code', Consolas, monospace;
+    color: #64748B;
     font-size: 0.68rem;
-    margin-bottom: 1.1rem;
-    letter-spacing: 0.02em;
+    margin-bottom: 1rem;
   }}
 
   table {{
     width: 100%;
     border-collapse: collapse;
-    font-family: 'DM Mono', Consolas, monospace;
-    font-size: 0.75rem;
+    font-family: 'SF Mono', 'Fira Code', Consolas, monospace;
+    font-size: 0.73rem;
   }}
 
   th {{
-    background: #F0EDE6;
+    background: #F1F5F9;
     text-align: left;
-    padding: 0.55rem 0.75rem;
-    border-bottom: 2px solid #D8D0C5;
-    font-family: 'DM Mono', Consolas, monospace;
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid #E2E8F0;
     font-weight: 500;
     font-size: 0.6rem;
     text-transform: uppercase;
     letter-spacing: 0.1em;
-    color: #6B5E50;
+    color: #475569;
     white-space: nowrap;
   }}
 
   td {{
-    padding: 0.5rem 0.75rem;
-    border-bottom: 1px solid #F0EDE6;
-    color: #2C2620;
+    padding: 0.45rem 0.75rem;
+    border-bottom: 1px solid #F1F5F9;
+    color: #1E293B;
   }}
 
-  tr:hover td {{ background: #FAF7F2; }}
+  tr:hover td {{ background: #F8FAFC; }}
 
   .anomaly {{
     display: inline-block;
-    background: rgba(217,119,6,0.1);
+    background: #FEF3C7;
     color: #92400E;
     padding: 0.1rem 0.35rem;
-    border-radius: 2px;
-    font-family: 'DM Mono', Consolas, monospace;
-    font-size: 0.65rem;
+    border-radius: 3px;
+    font-size: 0.63rem;
     margin-right: 0.2rem;
     margin-bottom: 0.15rem;
   }}
 
-  .error {{ color: #B91C1C; font-family: 'DM Mono', Consolas, monospace; font-size: 0.8rem; }}
+  .error {{ color: #DC2626; font-size: 0.8rem; }}
 
   .type-badge {{
     display: inline-block;
-    background: #EDE9E0;
+    background: #F1F5F9;
     padding: 0.1rem 0.4rem;
-    border-radius: 2px;
-    font-size: 0.65rem;
-    font-family: 'DM Mono', Consolas, monospace;
-    color: #6B5E50;
-    border: 1px solid #D8D0C5;
+    border-radius: 3px;
+    font-size: 0.63rem;
+    color: #475569;
+    border: 1px solid #E2E8F0;
   }}
 
   .null-bar {{
     display: inline-block;
     width: 56px;
-    height: 5px;
-    background: #E8E2D8;
+    height: 4px;
+    background: #E2E8F0;
     overflow: hidden;
     vertical-align: middle;
   }}
 
   .null-bar-fill {{ height: 100%; }}
-  .null-low {{ background: #059669; }}
-  .null-med {{ background: #D97706; }}
-  .null-high {{ background: #B91C1C; }}
+  .null-low {{ background: #22C55E; }}
+  .null-med {{ background: #F59E0B; }}
+  .null-high {{ background: #EF4444; }}
+
+  tr.col-detail td {{
+    padding: 0.2rem 0.75rem 0.35rem;
+    background: #F8FAFC;
+    color: #64748B;
+    font-size: 0.65rem;
+    border-bottom: 1px solid #E2E8F0;
+  }}
 
   .pattern-badge {{
     display: inline-block;
-    background: rgba(109,40,217,0.08);
-    color: #5B21B6;
+    background: #EDE9FE;
+    color: #6D28D9;
     padding: 0.1rem 0.35rem;
-    border-radius: 2px;
-    font-family: 'DM Mono', Consolas, monospace;
-    font-size: 0.65rem;
+    border-radius: 3px;
+    font-size: 0.63rem;
     margin-right: 0.2rem;
     margin-bottom: 0.15rem;
   }}
 
-  .constraint-info {{ margin-top: 0.75rem; font-size: 0.75rem; }}
+  .constraint-info {{ margin-top: 0.75rem; font-size: 0.73rem; }}
   .constraint-info span {{ margin-right: 0.75rem; }}
 
   .constraint-tag {{
     display: inline-block;
-    background: rgba(37,99,235,0.08);
+    background: #DBEAFE;
     color: #1D4ED8;
     padding: 0.1rem 0.4rem;
-    border-radius: 2px;
-    font-family: 'DM Mono', Consolas, monospace;
-    font-size: 0.65rem;
+    border-radius: 3px;
+    font-size: 0.63rem;
     margin-right: 0.2rem;
   }}
 
-  .fk-tag {{ background: rgba(109,40,217,0.08); color: #5B21B6; }}
+  .fk-tag {{ background: #EDE9FE; color: #6D28D9; }}
 
   .rel-section {{
     background: #FFFFFF;
-    border: 1px solid #E0D9CF;
+    border: 1px solid #E2E8F0;
     padding: 1.5rem;
-    margin-bottom: 1.25rem;
+    margin-bottom: 1rem;
   }}
 
   .rel-section h2 {{
-    font-family: 'Vollkorn', Georgia, serif;
-    font-size: 1.05rem;
-    font-weight: 700;
+    font-size: 0.95rem;
+    font-weight: 600;
     margin-bottom: 1rem;
-    color: #0F0D09;
+    color: #0F172A;
   }}
 
   .rel-badge {{
     display: inline-block;
     padding: 0.1rem 0.45rem;
-    border-radius: 2px;
-    font-family: 'DM Mono', Consolas, monospace;
+    border-radius: 3px;
     font-size: 0.62rem;
     font-weight: 500;
-    letter-spacing: 0.03em;
   }}
 
-  .rel-declared {{ background: rgba(37,99,235,0.08); color: #1D4ED8; }}
-  .rel-inferred {{ background: rgba(5,150,105,0.08); color: #047857; }}
+  .rel-declared {{ background: #DBEAFE; color: #1D4ED8; }}
+  .rel-inferred {{ background: #DCFCE7; color: #166534; }}
 </style>
 </head>
 <body>
@@ -289,21 +281,11 @@ TABLE_SECTION_TEMPLATE = """
         <tr>
           <th>Column</th>
           <th>Type</th>
-          <th>Canonical</th>
-          <th>Nulls</th>
+          <th>Null %</th>
           <th>Distinct</th>
           <th>Min</th>
           <th>Max</th>
           <th>Mean</th>
-          <th>Stddev</th>
-          <th>Median</th>
-          <th>p25 / p75</th>
-          <th>IQR</th>
-          <th>Skew</th>
-          <th>Kurt</th>
-          <th>Extra</th>
-          <th>Benford</th>
-          <th>Patterns</th>
           <th>Anomalies</th>
         </tr>
       </thead>
@@ -390,33 +372,66 @@ def _column_extra(col: dict) -> str:
     return html_lib.escape(", ".join(parts)) if parts else "—"
 
 
-def _column_row(col: dict) -> str:
-    anomalies_html = " ".join(f'<span class="anomaly">{html_lib.escape(str(a))}</span>' for a in col.get("anomalies", []))
-    p25 = col.get("p25")
-    p75 = col.get("p75")
-    p25p75 = f"{_fmt(p25)} / {_fmt(p75)}" if p25 is not None or p75 is not None else "—"
+def _column_detail_row(col: dict) -> str:
+    """Secondary row with extended stats — omitted if nothing to show."""
+    parts = []
+    if col.get("stddev") is not None:
+        parts.append(f"stddev: {_fmt(col['stddev'])}")
+    if col.get("median") is not None:
+        parts.append(f"median: {_fmt(col['median'])}")
+    p25, p75 = col.get("p25"), col.get("p75")
+    if p25 is not None or p75 is not None:
+        parts.append(f"p25/p75: {_fmt(p25)} / {_fmt(p75)}")
+    if col.get("iqr") is not None:
+        parts.append(f"iqr: {_fmt(col['iqr'])}")
+    if col.get("skewness") is not None:
+        parts.append(f"skew: {_fmt(col['skewness'])}")
+    if col.get("kurtosis") is not None:
+        parts.append(f"kurt: {_fmt(col['kurtosis'])}")
+    pval = col.get("benford_pvalue")
+    if pval is not None:
+        status = "Pass" if pval >= 0.01 else "Anomaly"
+        color = "#166534" if pval >= 0.01 else "#dc2626"
+        parts.append(f'benford: <span style="color:{color};font-weight:600">{status}</span>')
+    extra = _column_extra(col)
+    if extra != "—":
+        parts.append(f"extra: {extra}")
+    patterns = col.get("patterns", [])
+    if patterns:
+        scores = col.get("pattern_scores", {})
+        badges = " ".join(
+            f'<span class="pattern-badge">{html_lib.escape(str(p))} {scores.get(p, 0):.0%}</span>'
+            for p in patterns
+        )
+        parts.append(f"patterns: {badges}")
+    if not parts:
+        return ""
     return (
+        f'<tr class="col-detail">'
+        f'<td colspan="8">' + " &nbsp;|&nbsp; ".join(parts) + "</td>"
+        f"</tr>"
+    )
+
+
+def _column_row(col: dict) -> str:
+    anomalies_html = " ".join(
+        f'<span class="anomaly">{html_lib.escape(str(a))}</span>'
+        for a in col.get("anomalies", [])
+    )
+    main = (
         f"<tr>"
         f"<td><strong>{html_lib.escape(str(col['name']))}</strong></td>"
-        f'<td><span class="type-badge">{html_lib.escape(str(col["engine_type"]))}</span></td>'
-        f'<td><span class="type-badge">{html_lib.escape(str(col["canonical_type"]))}</span></td>'
+        f'<td><span class="type-badge">{html_lib.escape(str(col["engine_type"]))}</span>'
+        f' <span class="type-badge">{html_lib.escape(str(col["canonical_type"]))}</span></td>'
         f"<td>{_null_bar(col.get('null_rate', 0))}</td>"
         f"<td>{_fmt(col.get('approx_distinct'))}</td>"
         f"<td>{_fmt(col.get('min'))}</td>"
         f"<td>{_fmt(col.get('max'))}</td>"
         f"<td>{_fmt(col.get('mean'))}</td>"
-        f"<td>{_fmt(col.get('stddev'))}</td>"
-        f"<td>{_fmt(col.get('median'))}</td>"
-        f"<td>{p25p75}</td>"
-        f"<td>{_fmt(col.get('iqr'))}</td>"
-        f"<td>{_fmt(col.get('skewness'))}</td>"
-        f"<td>{_fmt(col.get('kurtosis'))}</td>"
-        f"<td>{_column_extra(col)}</td>"
-        f"<td>{_benford_badge(col)}</td>"
-        f"<td>{_pattern_badges(col)}</td>"
         f"<td>{anomalies_html or '—'}</td>"
         f"</tr>"
     )
+    return main + _column_detail_row(col)
 
 
 def _constraints_html(constraints: Any) -> str:
