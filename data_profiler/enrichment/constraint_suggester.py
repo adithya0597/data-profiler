@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from data_profiler.workers.stats_worker import ProfiledTable
+    from data_profiler.workers.relationship_worker import Relationship
 
 
 @dataclass
@@ -63,5 +64,56 @@ def suggest_constraints(table: ProfiledTable, quote_fn=None) -> list[dict]:
                 confidence=0.85,
                 evidence=f"min={col.min}, no negative values in {table.total_row_count} rows",
             ))
+
+        # ENUM: low-cardinality string columns → CHECK (col IN (...))
+        if (col.canonical_type == "string"
+                and col.top_values
+                and 1 < col.approx_distinct <= 10
+                and table.total_row_count > 0):
+            # Only suggest if top_values aren't PII-redacted
+            values = [tv["value"] for tv in col.top_values if tv["value"] != "[REDACTED]"]
+            if len(values) == col.approx_distinct:
+                escaped = [v.replace("'", "''") for v in values]
+                in_list = ", ".join(f"'{v}'" for v in escaped)
+                # Scale confidence with evidence: 100+ rows → 0.90, 20+ → 0.80, <20 → 0.70
+                rows = table.total_row_count
+                conf = 0.90 if rows >= 100 else (0.80 if rows >= 20 else 0.70)
+                suggestions.append(SuggestedConstraint(
+                    table=table.name,
+                    column=col.name,
+                    constraint_type="CHECK",
+                    expression=f"ALTER TABLE {quote_fn(table.name)} ADD CONSTRAINT ck_{table.name}_{col.name}_enum CHECK ({quote_fn(col.name)} IN ({in_list}))",
+                    confidence=conf,
+                    evidence=f"{col.approx_distinct} distinct values across {table.total_row_count} rows",
+                ))
+
+    return [asdict(s) for s in suggestions]
+
+
+def suggest_fk_constraints(
+    relationships: list[Relationship],
+    quote_fn=None,
+) -> list[dict]:
+    """Generate FK constraint suggestions from discovered relationships."""
+    if quote_fn is None:
+        quote_fn = lambda name: f'"{name}"'
+    suggestions: list[SuggestedConstraint] = []
+
+    for rel in relationships:
+        src_cols = ", ".join(quote_fn(c) for c in rel.source_columns)
+        tgt_cols = ", ".join(quote_fn(c) for c in rel.target_columns)
+        col_suffix = "_".join(rel.source_columns)
+        suggestions.append(SuggestedConstraint(
+            table=rel.source_table,
+            column=rel.source_columns[0] if len(rel.source_columns) == 1 else f"({', '.join(rel.source_columns)})",
+            constraint_type="FK",
+            expression=(
+                f"ALTER TABLE {quote_fn(rel.source_table)} "
+                f"ADD CONSTRAINT fk_{rel.source_table}_{col_suffix} "
+                f"FOREIGN KEY ({src_cols}) REFERENCES {quote_fn(rel.target_table)} ({tgt_cols})"
+            ),
+            confidence=rel.confidence,
+            evidence=f"{rel.relationship_type}: {rel.source_table}.{src_cols} → {rel.target_table}.{tgt_cols}",
+        ))
 
     return [asdict(s) for s in suggestions]

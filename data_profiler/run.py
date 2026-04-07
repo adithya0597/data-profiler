@@ -256,6 +256,19 @@ def run_profiler(
             if rels:
                 serializer.write_trailer(relationships_to_dict(rels))
                 logger.info("Discovered %d relationships across %d tables", len(rels), len(results))
+
+                # Generate FK constraint suggestions from discovered relationships
+                from data_profiler.enrichment.constraint_suggester import suggest_fk_constraints
+                fk_suggestions = suggest_fk_constraints(rels, quote_fn=adapter.quote_identifier)
+                if fk_suggestions:
+                    # Attach FK suggestions to their source tables
+                    results_by_name = {r.name: r for r in results}
+                    for fk in fk_suggestions:
+                        tbl = results_by_name.get(fk["table"])
+                        if tbl:
+                            if tbl.suggested_constraints is None:
+                                tbl.suggested_constraints = []
+                            tbl.suggested_constraints.append(fk)
         except Exception as e:
             logger.warning("Relationship discovery failed: %s", e)
 

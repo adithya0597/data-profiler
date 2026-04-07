@@ -1397,7 +1397,8 @@ function constraintSuggestSection(t) {
   var sc = t.suggested_constraints;
   if (!sc || sc.length === 0) return '';
   var rows = sc.map(function(s) {
-    var confColor = s.confidence >= 0.9 ? 'var(--green)' : (s.confidence >= 0.8 ? 'var(--blue)' : 'var(--text-dim)');
+    var typeColors = {'NOT NULL':'var(--green)','UNIQUE':'var(--blue)','CHECK':'var(--orange)','FK':'var(--purple)'};
+    var confColor = typeColors[s.constraint_type] || (s.confidence >= 0.9 ? 'var(--green)' : (s.confidence >= 0.8 ? 'var(--blue)' : 'var(--text-dim)'));
     return '<tr>'
       + '<td>' + esc(s.column) + '</td>'
       + '<td><span class="badge" style="background:' + confColor + ';color:#fff;font-size:0.65rem">' + esc(s.constraint_type) + '</span></td>'

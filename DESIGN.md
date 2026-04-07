@@ -192,15 +192,26 @@ The constraint suggester derives DDL recommendations from column statistics:
 
 | Rule | Condition | Suggestion |
 |------|-----------|-----------|
-| NOT NULL | `null_count == 0` across full scan | `NOT NULL` constraint |
-| UNIQUE | `approx_distinct ≈ row_count` (>99.5%) | `UNIQUE` constraint |
-| CHECK range | numeric, no nulls, known min/max | `CHECK (col BETWEEN min AND max)` |
-| FK | relationship worker confirms FK | `REFERENCES table(col)` |
-| ENUM | `approx_distinct ≤ 10` AND `canonical_type == "string"` | `CHECK (col IN (...))` |
+| NOT NULL | `null_rate == 0` and column is declared nullable | `ALTER TABLE ... ALTER COLUMN ... SET NOT NULL` |
+| UNIQUE | `all_unique` anomaly flag set | `ALTER TABLE ... ADD CONSTRAINT uq_... UNIQUE (col)` |
+| CHECK non-negative | numeric, `min >= 0`, `negative_count == 0` | `ALTER TABLE ... ADD CONSTRAINT ck_..._nonneg CHECK (col >= 0)` |
+| ENUM | string, `approx_distinct <= 10`, top values cover all distinct values | `ALTER TABLE ... ADD CONSTRAINT ck_..._enum CHECK (col IN (...))` |
+| FK | relationship discovered by RelationshipWorker (declared or inferred) | `ALTER TABLE ... ADD CONSTRAINT fk_... FOREIGN KEY (col) REFERENCES target(col)` |
 
-These suggestions are emitted as structured objects (not raw SQL strings) so that downstream DDL generation tools can render them in any target dialect.
+These suggestions are emitted as structured `SuggestedConstraint` objects (table, column, constraint_type, expression, confidence, evidence) so that downstream systems can filter by confidence or render in any target dialect. All DDL expressions use the engine's `quote_identifier()` for safe identifier quoting.
 
-**Design note:** Suggestions are conservative. A NOT NULL suggestion is only made when null_count is exactly zero across the full table scan — not the sample. The `full_scan_null_count` field tracks this separately from the sampled `null_count` to avoid false recommendations.
+**Design note:** Per-table suggestions (NOT NULL, UNIQUE, CHECK, ENUM) are generated during per-table profiling. FK suggestions are generated after cross-table relationship discovery and attached back to their source tables. PII-redacted columns are excluded from ENUM suggestions.
+
+### Confidence Model
+
+| Rule | Confidence | Basis |
+|------|-----------|-------|
+| NOT NULL | 0.95 | Fixed — zero nulls is unambiguous |
+| UNIQUE | 0.90 | Fixed — `all_unique` anomaly flag |
+| CHECK non-negative | 0.85 | Fixed — `min >= 0` with no negatives |
+| ENUM | 0.70–0.90 | Scales with row count: <20 rows → 0.70, 20–99 → 0.80, 100+ → 0.90 |
+| FK (declared) | 1.0 | From database catalog — ground truth |
+| FK (inferred) | 0.0–1.0 | Computed from value overlap sampling between source and target columns |
 
 ---
 
