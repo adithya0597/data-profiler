@@ -22,7 +22,16 @@ class SnowflakeAdapter(BaseAdapter):
     def sample_clause(self, table_name: str, sample_size: int, total_rows: int) -> str:
         if sample_size == 0 or sample_size >= total_rows:
             return ""
-        return f"SAMPLE ({sample_size} ROWS) SEED (42)"
+        # Snowflake only supports SEED with BERNOULLI/SYSTEM sampling, not row-based
+        pct = min((sample_size / total_rows) * 100, 100.0)
+        return f"SAMPLE BERNOULLI ({pct:.4f}) SEED (42)"
+
+    def set_session_params(self, engine: Engine, config: "ProfilerConfig") -> None:
+        from sqlalchemy import text
+        with engine.connect() as conn:
+            conn.execute(text(f"ALTER SESSION SET STATEMENT_TIMEOUT_IN_SECONDS = {int(config.query_timeout)}"))
+            conn.execute(text("ALTER SESSION SET QUERY_TAG = 'data_profiler'"))
+            conn.commit()
 
     def approx_distinct_sql(self, column: str, alias: str) -> str:
         return f"APPROX_COUNT_DISTINCT({column}) AS {alias}"

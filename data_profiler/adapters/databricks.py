@@ -24,7 +24,15 @@ class DatabricksAdapter(BaseAdapter):
             return ""
         # Databricks uses percentage-based Bernoulli sampling
         pct = min((sample_size / total_rows) * 100, 100.0)
-        return f"TABLESAMPLE ({pct:.2f} PERCENT) REPEATABLE (42)"
+        return f"TABLESAMPLE ({pct:.4f} PERCENT)"
+
+    def set_session_params(self, engine: Engine, config: "ProfilerConfig") -> None:
+        from sqlalchemy import text
+        # Databricks timeout is set at connection/cluster level, not via SQL.
+        # Always set timezone for consistent timestamp handling.
+        with engine.connect() as conn:
+            conn.execute(text("SET spark.sql.session.timeZone = 'UTC'"))
+            conn.commit()
 
     def approx_distinct_sql(self, column: str, alias: str) -> str:
         return f"APPROX_COUNT_DISTINCT({column}) AS {alias}"

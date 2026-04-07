@@ -67,7 +67,7 @@ The `BaseAdapter` provides safe defaults (exact `COUNT(DISTINCT)`, no percentile
 
 ## 3. Type System
 
-The profiler maps every engine's native type vocabulary to 8 canonical types:
+The profiler maps every engine's native type vocabulary to 10 canonical types:
 
 | Canonical | Examples |
 |-----------|---------|
@@ -78,11 +78,13 @@ The profiler maps every engine's native type vocabulary to 8 canonical types:
 | `date`    | DATE |
 | `datetime` | TIMESTAMP, DATETIME, TIMESTAMPTZ |
 | `binary`  | BLOB, BYTEA, VARBINARY |
+| `time`    | TIME, TIME_WITH_TIMEZONE |
+| `semi_structured` | VARIANT, OBJECT, ARRAY, MAP, STRUCT, GEOGRAPHY, GEOMETRY |
 | `unknown` | anything not matched |
 
-**Why 8?** Each type maps to a distinct set of meaningful statistics. `mean` on a `datetime` is undefined. `min_length` on an `integer` is meaningless. By dispatching through a type→aggregates map, the profiler avoids silently computing nonsense values.
+**Why 10?** Each type maps to a distinct set of meaningful statistics. `mean` on a `datetime` is undefined. `min_length` on an `integer` is meaningless. By dispatching through a type→aggregates map, the profiler avoids silently computing nonsense values. The `time` type gets min/max, while `semi_structured` types (Snowflake VARIANT, Databricks MAP/STRUCT, spatial types) get count-only since nested aggregation is not meaningful.
 
-**How it enables graph interop:** OpenMetadata, Apache Atlas, and DataHub all use canonical type enumerations. The 8-type system maps directly to these schemas — the export layer does not need per-engine translation logic. A profile captured from DuckDB and one from Snowflake for the same logical table produce structurally identical metadata.
+**How it enables graph interop:** OpenMetadata, Apache Atlas, and DataHub all use canonical type enumerations. The 10-type system maps directly to these schemas — the export layer does not need per-engine translation logic. A profile captured from DuckDB and one from Snowflake for the same logical table produce structurally identical metadata.
 
 ---
 
@@ -95,7 +97,7 @@ For large tables, profiling the full dataset is impractical. The profiler uses a
 - DuckDB: `USING SAMPLE {n} ROWS (reservoir, 42)` — reservoir sampling for statistical guarantees
 - Snowflake: `TABLESAMPLE BERNOULLI ({pct} PERCENT)` — percentage-based
 - SQLite: no native sampling; uses `ORDER BY RANDOM() LIMIT {n}` (expensive but necessary)
-- Databricks: `TABLESAMPLE ({n} ROWS)` — row-count sampling
+- Databricks: `TABLESAMPLE ({pct} PERCENT)` — percentage-based Bernoulli sampling
 
 **Tier 2 — Full-table distinct counts (accurate)**
 - `approx_count_distinct` (HLL) runs on the full table in a separate query, regardless of sampling

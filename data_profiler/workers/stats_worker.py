@@ -192,6 +192,14 @@ AGGREGATE_MAP: dict[str, list[tuple[str, str]]] = {
     "binary": [
         ("COUNT({col})", "non_null"),
     ],
+    "time": [
+        ("COUNT({col})", "non_null"),
+        ("MIN({col})", "min"),
+        ("MAX({col})", "max"),
+    ],
+    "semi_structured": [
+        ("COUNT({col})", "non_null"),
+    ],
     "unknown": [
         ("COUNT({col})", "non_null"),
     ],
@@ -1267,6 +1275,12 @@ def profile_table(
                         cp.freshness_days = (datetime.now(timezone.utc).date() - max_date).days
                     except (ValueError, TypeError, AttributeError):
                         pass
+
+            elif col.canonical_type == "time":
+                raw_min = merged.get(f"{col.name}__min")
+                raw_max = merged.get(f"{col.name}__max")
+                cp.min = str(raw_min) if raw_min is not None else None
+                cp.max = str(raw_max) if raw_max is not None else None
 
             elif col.canonical_type == "boolean":
                 true_count = merged.get(f"{col.name}__true_count")

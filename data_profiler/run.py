@@ -56,6 +56,7 @@ def run_profiler(
     # Setup
     adapter = _create_adapter(config)
     engine = adapter.get_engine()
+    adapter.set_session_params(engine, config)
     run_id = config.resume or str(uuid.uuid4())[:8]
 
     # Auto-cap concurrency for DuckDB in-process

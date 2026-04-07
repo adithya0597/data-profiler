@@ -44,4 +44,5 @@ class ProfilerConfig(BaseModel):
     enable_correlation: bool = Field(default=True, description="Compute Pearson/Cramér's V correlations")
     correlation_max_columns: int = Field(default=20, ge=2, description="Max numeric columns for correlation matrix")
     enable_benford: bool = Field(default=True, description="Run Benford's Law analysis on numeric columns")
+    query_timeout: int = Field(default=300, ge=0, description="Statement timeout in seconds (0 = no limit)")
     anomaly_thresholds: AnomalyThresholds = Field(default_factory=AnomalyThresholds, description="Tunable anomaly detection thresholds")

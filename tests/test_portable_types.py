@@ -52,10 +52,26 @@ class TestMapType:
         ("VARBINARY", "binary"),
         ("BYTES", "binary"),
 
-        # Unknown
-        ("GEOMETRY", "unknown"),
-        ("ARRAY", "unknown"),
-        ("VARIANT", "unknown"),
+        # Time
+        ("TIME", "time"),
+        ("TIME_WITH_TIMEZONE", "time"),
+
+        # Semi-structured (Snowflake)
+        ("VARIANT", "semi_structured"),
+        ("OBJECT", "semi_structured"),
+        ("ARRAY", "semi_structured"),
+
+        # Semi-structured (Databricks)
+        ("MAP", "semi_structured"),
+        ("STRUCT", "semi_structured"),
+
+        # Spatial
+        ("GEOGRAPHY", "semi_structured"),
+        ("GEOMETRY", "semi_structured"),
+
+        # Misc
+        ("INTERVAL", "semi_structured"),
+        ("VOID", "semi_structured"),
     ])
     def test_type_mapping(self, engine_type: str, expected: str):
         assert map_type(engine_type) == expected

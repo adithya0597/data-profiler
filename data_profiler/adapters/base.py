@@ -86,6 +86,10 @@ class BaseAdapter(ABC):
         escaped = name.replace('"', '""')
         return f'"{escaped}"'
 
+    def set_session_params(self, engine: Engine, config: Any) -> None:
+        """Set engine-specific session parameters (timeout, query tag, etc.)."""
+        pass
+
     def supports_constraints(self) -> bool:
         """Whether this engine supports constraint introspection via Inspector.
 

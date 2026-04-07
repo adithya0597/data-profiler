@@ -1,4 +1,4 @@
-"""Portable type schema: maps engine-specific types to 8 canonical types."""
+"""Portable type schema: maps engine-specific types to 10 canonical types."""
 
 from __future__ import annotations
 
@@ -19,6 +19,13 @@ CANONICAL_TYPES = {
     ],
     "date": ["DATE"],
     "binary": ["BYTES", "BINARY", "VARBINARY", "BLOB", "BYTEA"],
+    "time": ["TIME", "TIME_WITH_TIMEZONE"],
+    "semi_structured": [
+        "VARIANT", "OBJECT", "ARRAY",       # Snowflake
+        "MAP", "STRUCT",                      # Databricks
+        "GEOGRAPHY", "GEOMETRY",              # Spatial
+        "INTERVAL", "VOID",                   # Databricks misc
+    ],
     "unknown": [],
 }
 
@@ -33,7 +40,7 @@ _PARAMETERIZED_RE = re.compile(r"^([A-Z_]+)\s*\(.*\)$")
 
 
 def map_type(engine_type: str) -> str:
-    """Map an engine-specific type string to one of the 8 canonical types.
+    """Map an engine-specific type string to one of the 10 canonical types.
 
     Handles parameterized types like NUMBER(38,0) by stripping parameters.
     Special case: NUMBER(p,0) where scale=0 maps to integer.

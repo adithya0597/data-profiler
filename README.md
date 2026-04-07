@@ -20,7 +20,7 @@ The natural evolution is toward a **declarative profiling DSL** — where type m
 ## Feature Highlights
 
 ### Schema Intelligence
-- **8 canonical types** normalize across engine vocabularies — `TIMESTAMP_NTZ`, `TIMESTAMPTZ`, and `DATETIME` all map to `datetime`, enabling cross-engine metadata comparison
+- **10 canonical types** normalize across engine vocabularies — `TIMESTAMP_NTZ`, `TIMESTAMPTZ`, and `DATETIME` all map to `datetime`; Snowflake VARIANT/OBJECT/ARRAY and Databricks MAP/STRUCT map to `semi_structured` — enabling cross-engine metadata comparison
 - **FK relationship inference** — discovers foreign key relationships statistically from column names, types, cardinality, and value overlap (no DDL access required)
 - **Semantic FK discovery** — detects naming-convention relationships (e.g., `ss_customer_sk` → `customer.c_customer_sk`) via suffix pattern matching (`*_sk`, `*_id`, `*_key`)
 - **Composite key detection** — identifies multi-column FK relationships by matching declared composite primary keys across tables
@@ -102,7 +102,7 @@ data_profiler/
 │   ├── delta_worker.py     # Incremental delta detection (schema hash, watermark, row count)
 │   └── merge_worker.py     # Welford's parallel algorithm for statistical merging
 ├── schema/
-│   └── portable_types.py   # 8 canonical types with cross-engine type mapping
+│   └── portable_types.py   # 10 canonical types with cross-engine type mapping
 ├── enrichment/
 │   ├── anomaly.py          # 19 rule-based anomaly flags
 │   ├── patterns.py         # PII and semantic pattern detection (regex-based)

@@ -47,7 +47,7 @@ def generate_synthetic_data(path: str = SYNTHETIC_DB) -> str:
     - FK relationship discovery (dept_id, emp_id, project_id cross-table)
     - PII pattern detection (email, phone, ip_address)
     - Boolean profiling (is_active)
-    - All 8 canonical types: integer, float, string, date, datetime, boolean
+    - All 10 canonical types: integer, float, string, date, datetime, boolean, binary, time, semi_structured
     - ~15,600 rows total, generates in <3 seconds
     """
     import duckdb
