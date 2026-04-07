@@ -48,6 +48,8 @@ The natural evolution is toward a **declarative profiling DSL** — where type m
 
 ## Quick Start
 
+Requires **Python 3.10+**.
+
 ```bash
 # Install
 pip install -e ".[dev]"
@@ -56,10 +58,20 @@ pip install -e ".[dev]"
 python demo.py
 
 # Profile a database
-profiler run --engine duckdb --dsn "duckdb:///data/mydb.duckdb" --sample 10000 -o profiles/output.ndjson
+profiler run --engine duckdb --dsn "duckdb:///data/mydb.duckdb" --sample 10000 -o profiles/output.json
 ```
 
-The demo generates a synthetic 5-table dataset with FK relationships, PII columns, and numeric distributions — no external data required. If `data/tpcds_1gb.duckdb` is present, the demo uses the full TPC-DS 1GB dataset instead.
+The demo runs 5 phases automatically and produces these files in `profiles/`:
+
+| File | Description |
+|------|-------------|
+| `synthetic_duckdb.ndjson` | Per-table profiling results (DuckDB) |
+| `demo_sqlite.ndjson` | Per-table profiling results (SQLite cross-engine comparison) |
+| `profile_openmetadata.json` | OpenMetadata-compatible catalog export |
+| `profile_report.html` | Self-contained HTML report — open in any browser |
+| `profile_dashboard.html` | Interactive 8-section dashboard — open in any browser |
+
+No external data required. If `data/tpcds_1gb.duckdb` is present, the demo uses the full TPC-DS 1GB dataset (25 tables, ~19.6M rows) instead of generating synthetic data.
 
 ---
 
@@ -171,32 +183,68 @@ Each column profile includes:
 
 ## CLI Reference
 
+The CLI has three commands: `run` (profile tables), `dashboard` (generate interactive HTML), and `export` (catalog-compatible output).
+
+### `profiler run`
+
 ```bash
 profiler run \
   --engine duckdb \
   --dsn "duckdb:///data/mydb.duckdb" \
   --sample 10000 \
   --concurrency 4 \
-  --output-format ndjson \
-  --output profiles/output.ndjson
+  --output-format json \
+  --output profiles/output.json
 ```
 
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--engine` | required | `snowflake`, `databricks`, `duckdb`, `sqlite` |
 | `--dsn` | required | SQLAlchemy connection string |
+| `--database` | all | Database/catalog to profile |
+| `--schema` | all | Schema filter |
 | `--sample` | 10000 | Rows sampled per table (0 = full scan) |
 | `--concurrency` | 4 | Parallel table workers |
+| `--stats-depth` | full | `full` = all statistics; `fast` = schema only |
 | `--exact-distinct` | false | Force `COUNT(DISTINCT)` instead of HLL |
-| `--output-format` | ndjson | `ndjson`, `yaml`, `parquet`, `csv` |
-| `--output` | auto | Output file path |
+| `--column-batch-size` | 80 | Max columns per aggregate SELECT (for wide tables) |
+| `--output-format` | json | `json`, `yaml`, `parquet`, `html` |
+| `--output`, `-o` | auto | Output file path (default: `profiles/{run_id}.ndjson`) |
 | `--resume` | — | Resume a previous run by run ID |
+| `-v`, `--verbose` | false | Enable debug logging |
+
+### `profiler dashboard`
+
+Profiles a database and generates an interactive HTML dashboard in one step.
+
+```bash
+profiler dashboard \
+  --engine duckdb \
+  --dsn "duckdb:///data/mydb.duckdb" \
+  --sample 10000 \
+  -o profiles/dashboard.html
+
+# Open the result
+open profiles/dashboard.html
+```
+
+### `profiler export`
+
+Profiles a database and exports results in catalog-compatible format.
+
+```bash
+profiler export \
+  --engine snowflake \
+  --dsn "snowflake://user:pass@account/mydb/public?warehouse=WH" \
+  --format openmetadata-json \
+  -o profiles/catalog_export.json
+```
 
 ---
 
 ## DSN Connection Strings
 
-```
+```bash
 # DuckDB (local file)
 duckdb:///path/to/file.duckdb
 
@@ -212,10 +260,112 @@ databricks://token:TOKEN@hostname:443/sql/1.0/warehouses/ID?catalog=CATALOG&sche
 
 ---
 
+## Usage Examples
+
+### Quick scan of a local DuckDB file
+
+```bash
+# Schema + basic stats only (fast mode, no histograms/correlations/Benford)
+profiler run --engine duckdb --dsn "duckdb:///data/warehouse.duckdb" --stats-depth fast -o profiles/quick.json
+```
+
+### Full audit with dashboard
+
+```bash
+# Full profiling + interactive dashboard
+profiler dashboard --engine duckdb --dsn "duckdb:///data/warehouse.duckdb" --sample 50000 -o profiles/audit.html
+open profiles/audit.html
+```
+
+### Profile a Snowflake warehouse
+
+```bash
+# Profile a specific schema in Snowflake, sampling 10K rows per table
+profiler run \
+  --engine snowflake \
+  --dsn "snowflake://analyst:$SF_PASS@xy12345.us-east-1/PROD_DB/PUBLIC?warehouse=COMPUTE_WH&role=DATA_READER" \
+  --database PROD_DB \
+  --schema PUBLIC \
+  --sample 10000 \
+  --concurrency 8 \
+  -o profiles/snowflake_prod.json
+```
+
+Snowflake adapter uses `SAMPLE (n ROWS)` for native row sampling, `APPROX_COUNT_DISTINCT` for HLL, and `APPROX_PERCENTILE` for quantiles. Parallelism is safe — each worker gets its own connection from the pool.
+
+### Profile a Databricks SQL warehouse
+
+```bash
+profiler run \
+  --engine databricks \
+  --dsn "databricks://token:$DBX_TOKEN@adb-12345.azuredatabricks.net:443/sql/1.0/warehouses/abc123?catalog=main&schema=default" \
+  --sample 10000 \
+  -o profiles/databricks_main.json
+```
+
+Databricks adapter uses backtick quoting, `TABLESAMPLE (n PERCENT)` with Bernoulli sampling, `APPROX_COUNT_DISTINCT`, and `PERCENTILE_APPROX`. Supports native `SKEWNESS()` and `KURTOSIS()`.
+
+### Profile a SQLite database
+
+```bash
+profiler run \
+  --engine sqlite \
+  --dsn "sqlite:///data/app.db" \
+  --sample 5000 \
+  -o profiles/sqlite_app.json
+```
+
+SQLite has no native HLL, STDDEV, or percentiles — the profiler uses exact `COUNT(DISTINCT)`, skips stddev/percentiles (returns null), and samples via `ORDER BY RANDOM() LIMIT`. This is a deliberate accuracy-over-approximation tradeoff: SQLite profiles report only what the engine can compute exactly.
+
+### Export to OpenMetadata catalog
+
+```bash
+# Profile + export in catalog-native schema for ingestion
+profiler export \
+  --engine duckdb \
+  --dsn "duckdb:///data/warehouse.duckdb" \
+  --format openmetadata-json \
+  -o profiles/openmetadata.json
+```
+
+Output contains table and column entities with FK relationships, ready for catalog ingestion via OpenMetadata's API.
+
+### Resume a crashed run
+
+```bash
+# First run crashes at table 47/100
+profiler run --engine snowflake --dsn "..." --sample 10000 -o profiles/output.json
+# Output shows: Run ID: a1b2c3d4 (resumable)
+
+# Resume — skips the 46 tables already completed
+profiler run --engine snowflake --dsn "..." --resume a1b2c3d4 -o profiles/output.json
+```
+
+Progress is checkpointed to `profiler_checkpoint.db` after each table completes. Resume skips tables marked as done and retries tables that were in-progress or errored.
+
+### Profile only specific tables
+
+```python
+# Programmatic usage with table filtering
+from data_profiler.config import ProfilerConfig
+from data_profiler.run import run_profiler
+
+config = ProfilerConfig(
+    engine="duckdb",
+    dsn="duckdb:///data/warehouse.duckdb",
+    sample_size=10000,
+)
+# The CLI profiles all tables; for selective profiling, use the Python API
+# and filter results, or use --schema to limit scope
+run_id, results = run_profiler(config)
+```
+
+---
+
 ## Tests
 
 ```bash
-# Run all tests (328 tests)
+# Run all tests (345 tests)
 pytest tests/ -v
 
 # Unit tests only (no database required, fast)
