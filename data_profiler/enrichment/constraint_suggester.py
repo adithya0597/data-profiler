@@ -19,8 +19,10 @@ class SuggestedConstraint:
     evidence: str
 
 
-def suggest_constraints(table: ProfiledTable) -> list[dict]:
+def suggest_constraints(table: ProfiledTable, quote_fn=None) -> list[dict]:
     """Generate constraint suggestions from a profiled table's statistics."""
+    if quote_fn is None:
+        quote_fn = lambda name: f'"{name}"'
     suggestions: list[SuggestedConstraint] = []
 
     for col in table.columns:
@@ -30,7 +32,7 @@ def suggest_constraints(table: ProfiledTable) -> list[dict]:
                 table=table.name,
                 column=col.name,
                 constraint_type="NOT NULL",
-                expression=f"ALTER TABLE {table.name} ALTER COLUMN {col.name} SET NOT NULL",
+                expression=f"ALTER TABLE {quote_fn(table.name)} ALTER COLUMN {quote_fn(col.name)} SET NOT NULL",
                 confidence=0.95,
                 evidence=f"0 nulls across {table.total_row_count} rows",
             ))
@@ -41,7 +43,7 @@ def suggest_constraints(table: ProfiledTable) -> list[dict]:
                 table=table.name,
                 column=col.name,
                 constraint_type="UNIQUE",
-                expression=f"ALTER TABLE {table.name} ADD CONSTRAINT uq_{table.name}_{col.name} UNIQUE ({col.name})",
+                expression=f"ALTER TABLE {quote_fn(table.name)} ADD CONSTRAINT uq_{table.name}_{col.name} UNIQUE ({quote_fn(col.name)})",
                 confidence=0.9,
                 evidence=f"{col.approx_distinct} distinct values across {table.total_row_count} rows",
             ))
@@ -57,7 +59,7 @@ def suggest_constraints(table: ProfiledTable) -> list[dict]:
                 table=table.name,
                 column=col.name,
                 constraint_type="CHECK",
-                expression=f"ALTER TABLE {table.name} ADD CONSTRAINT ck_{table.name}_{col.name}_nonneg CHECK ({col.name} >= 0)",
+                expression=f"ALTER TABLE {quote_fn(table.name)} ADD CONSTRAINT ck_{table.name}_{col.name}_nonneg CHECK ({quote_fn(col.name)} >= 0)",
                 confidence=0.85,
                 evidence=f"min={col.min}, no negative values in {table.total_row_count} rows",
             ))

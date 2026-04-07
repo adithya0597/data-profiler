@@ -379,7 +379,7 @@ def _compute_monotonicity(
     q = (
         f"SELECT {qcol} FROM {qualified} "
         f"WHERE {qcol} IS NOT NULL "
-        f"LIMIT {limit}"
+        f"ORDER BY rowid LIMIT {limit}"
     )
     try:
         with engine.connect() as conn:
@@ -1433,7 +1433,7 @@ def profile_table(
             logger.debug("Histograms for %s: %.2fs", table_name, time.time() - hist_start)
 
         # Post-profiling: Benford's Law analysis
-        if config.enable_benford:
+        if config.enable_benford and adapter.supports_regex():
             benford_start = time.time()
             for cp in result.columns:
                 if (cp.canonical_type in ("integer", "float")

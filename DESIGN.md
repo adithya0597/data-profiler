@@ -11,7 +11,7 @@ Most data profilers are built for analysts: give me counts, nulls, a histogram. 
 The distinction shapes every architectural choice:
 
 - **Output is first-class.** The profile is not a report to be read once — it is a structured artifact consumed by downstream systems. Every field in `ColumnProfile` is explicitly named, typed, and serializable to NDJSON, Parquet, or OpenMetadata JSON.
-- **Schema intelligence over raw statistics.** The 8-canonical-type system exists so that downstream systems can reason about columns without understanding each engine's native type vocabulary. A Snowflake `TIMESTAMP_NTZ` and a DuckDB `TIMESTAMPTZ` both map to `datetime` — one fact, not two.
+- **Schema intelligence over raw statistics.** The 10-canonical-type system exists so that downstream systems can reason about columns without understanding each engine's native type vocabulary. A Snowflake `TIMESTAMP_NTZ` and a DuckDB `TIMESTAMPTZ` both map to `datetime` — one fact, not two.
 - **Relationships are first-class.** FK inference, functional dependency detection, and cross-column correlation are not optional add-ons. They are the primary value a profiler delivers to a knowledge graph. A column stat without its relational context is isolated signal; with it, it becomes a graph edge.
 
 ---

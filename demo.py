@@ -413,8 +413,8 @@ def _validate_synthetic(results: list, check) -> None:
     if rels:
         print(f"  Found {len(rels)} candidate FK relationships:")
         for r in rels[:5]:
-            print(f"    {r.from_table}.{r.from_column} → {r.to_table}.{r.to_column} "
-                  f"(score={r.score:.2f})")
+            print(f"    {r.source_table}.{r.source_columns[0]} → {r.target_table}.{r.target_columns[0]} "
+                  f"(confidence={r.confidence:.2f})")
 
 
 def _validate_tpcds(results: list, check) -> None:

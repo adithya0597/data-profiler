@@ -208,6 +208,22 @@ class CSVSerializer:
         self._file.close()
 
 
+_YAML_AMBIGUOUS = frozenset({
+    "true", "false", "yes", "no", "on", "off", "null", "~",
+    "True", "False", "Yes", "No", "On", "Off", "Null",
+    "TRUE", "FALSE", "YES", "NO", "ON", "OFF", "NULL",
+})
+
+
+def _looks_numeric(s: str) -> bool:
+    """Return True if s would be parsed as a YAML number."""
+    try:
+        float(s)
+        return True
+    except (ValueError, TypeError):
+        return False
+
+
 def _yaml_value(v: Any) -> str:
     """Format a value for YAML output."""
     if v is None:
@@ -215,8 +231,12 @@ def _yaml_value(v: Any) -> str:
     if isinstance(v, bool):
         return "true" if v else "false"
     if isinstance(v, str):
-        if any(c in v for c in (":", "#", "'", '"', "\n", "{", "}", "[", "]")):
-            return f'"{v}"'
+        if (v in _YAML_AMBIGUOUS
+                or _looks_numeric(v)
+                or v == ""
+                or any(c in v for c in (":", "#", "'", '"', "\n", "{", "}", "[", "]"))):
+            escaped = v.replace('"', '\\"')
+            return f'"{escaped}"'
         return v
     if isinstance(v, list):
         return json.dumps(v)

@@ -90,6 +90,10 @@ class BaseAdapter(ABC):
         """Set engine-specific session parameters (timeout, query tag, etc.)."""
         pass
 
+    def supports_regex(self) -> bool:
+        """Whether this engine supports REGEXP_REPLACE in SQL."""
+        return True
+
     def supports_constraints(self) -> bool:
         """Whether this engine supports constraint introspection via Inspector.
 

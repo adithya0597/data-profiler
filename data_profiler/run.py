@@ -200,7 +200,7 @@ def run_profiler(
         # Constraint suggestions (post-profiling enrichment)
         if not result.error:
             try:
-                cs = suggest_constraints(result)
+                cs = suggest_constraints(result, quote_fn=adapter.quote_identifier)
                 if cs:
                     result.suggested_constraints = cs
             except Exception as e:

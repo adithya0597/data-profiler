@@ -43,6 +43,9 @@ class SQLiteAdapter(BaseAdapter):
     def supports_percentiles(self) -> bool:
         return False
 
+    def supports_regex(self) -> bool:
+        return False
+
     def supports_constraints(self) -> bool:
         return False
 

@@ -1254,7 +1254,8 @@ class TestTPCDS_FullScanIntegrity:
             for col in t.columns:
                 assert col.canonical_type in (
                     "integer", "float", "string", "boolean",
-                    "date", "datetime", "binary", "unknown",
+                    "date", "datetime", "binary", "time",
+                    "semi_structured", "unknown",
                 ), f"{name}.{col.name}: unexpected type '{col.canonical_type}'"
 
     def test_null_rate_consistent(self, tpcds_profiles):
