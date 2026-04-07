@@ -33,6 +33,9 @@ class SnowflakeAdapter(BaseAdapter):
     def skewness_sql(self, column: str) -> str | None:
         return f"SKEW({column})"
 
+    def kurtosis_sql(self, column: str) -> str | None:
+        return f"KURTOSIS({column})"
+
     def correlation_sql(self, col1: str, col2: str) -> str | None:
         return f"CORR({col1}, {col2})"
 

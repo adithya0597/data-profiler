@@ -9,6 +9,7 @@ from data_profiler.adapters.sqlite import SQLiteAdapter
 from data_profiler.workers.stats_worker import (
     ColumnProfile,
     ProfiledTable,
+    compute_quality_score,
     _chi2_pvalue,
     _compute_histogram,
     _compute_benford,
@@ -1316,3 +1317,69 @@ class TestUniqueCountAndUniquenessRatio:
         )
         assert cp.unique_count is None
         assert cp.uniqueness_ratio is None
+
+
+# ---- Feature: Data Quality Score ----
+
+class TestQualityScore:
+    def _make_col(self, null_rate=0.0, anomalies=None):
+        return ColumnProfile(
+            name="c", engine_type="INTEGER", canonical_type="integer",
+            comment=None, nullable=True, null_rate=null_rate,
+            anomalies=anomalies or [],
+        )
+
+    def test_perfect_score(self):
+        """Table with no anomalies, no nulls, no dupes → 100."""
+        t = ProfiledTable(name="t", comment=None, columns=[self._make_col()])
+        assert compute_quality_score(t) == 100.0
+
+    def test_error_table_returns_zero(self):
+        t = ProfiledTable(name="t", comment=None, error="boom")
+        assert compute_quality_score(t) == 0.0
+
+    def test_empty_columns_returns_100(self):
+        t = ProfiledTable(name="t", comment=None, columns=[])
+        assert compute_quality_score(t) == 100.0
+
+    def test_anomaly_penalty(self):
+        """10 anomalies × 3 pts = 30 penalty → score 70."""
+        col = self._make_col(anomalies=["a"] * 10)
+        t = ProfiledTable(name="t", comment=None, columns=[col])
+        assert compute_quality_score(t) == 70.0
+
+    def test_anomaly_penalty_capped_at_30(self):
+        """20 anomalies × 3 = 60 but capped at 30 → score 70."""
+        col = self._make_col(anomalies=["a"] * 20)
+        t = ProfiledTable(name="t", comment=None, columns=[col])
+        assert compute_quality_score(t) == 70.0
+
+    def test_null_penalty(self):
+        """avg null rate 0.5 × 40 = 20 penalty → score 80."""
+        col = self._make_col(null_rate=0.5)
+        t = ProfiledTable(name="t", comment=None, columns=[col])
+        assert compute_quality_score(t) == 80.0
+
+    def test_duplicate_penalty(self):
+        """duplicate_rate 0.1 × 100 = 10 penalty → score 90."""
+        col = self._make_col()
+        t = ProfiledTable(name="t", comment=None, columns=[col], duplicate_rate=0.1)
+        assert compute_quality_score(t) == 90.0
+
+    def test_combined_penalties(self):
+        """Anomalies + nulls + dupes all contribute."""
+        col = self._make_col(null_rate=0.25, anomalies=["a", "b"])
+        t = ProfiledTable(name="t", comment=None, columns=[col], duplicate_rate=0.05)
+        # 100 - 6 (2×3) - 10 (0.25×40) - 5 (0.05×100) = 79
+        assert compute_quality_score(t) == 79.0
+
+    def test_score_floors_at_minimum(self):
+        """Max penalties: 30 (anomaly) + 20 (null) + 15 (dupe) = 65 → score 35."""
+        col = self._make_col(null_rate=1.0, anomalies=["a"] * 20)
+        t = ProfiledTable(name="t", comment=None, columns=[col], duplicate_rate=1.0)
+        assert compute_quality_score(t) == 35.0
+
+    def test_field_default(self):
+        """ProfiledTable.quality_score defaults to 0.0."""
+        t = ProfiledTable(name="t", comment=None)
+        assert t.quality_score == 0.0

@@ -84,5 +84,22 @@ class CheckpointDB:
         )
         return {row[0] for row in cursor.fetchall()}
 
+    def mark_skipped(self, run_id: str, table_name: str) -> None:
+        """Mark a table as skipped (unchanged in incremental mode)."""
+        now = datetime.now(timezone.utc).isoformat()
+        with self._lock:
+            self._conn.execute(
+                """INSERT OR REPLACE INTO profiled_tables
+                   (run_id, table_name, started_at, completed_at, status)
+                   VALUES (?, ?, ?, ?, 'skipped')""",
+                (run_id, table_name, now, now),
+            )
+            self._conn.commit()
+
+    def get_profile_store(self) -> "ProfileStore":
+        """Create a ProfileStore sharing this checkpoint's connection and lock."""
+        from data_profiler.persistence.profile_store import ProfileStore
+        return ProfileStore(self._conn, self._lock)
+
     def close(self) -> None:
         self._conn.close()

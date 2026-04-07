@@ -113,7 +113,27 @@ class ProfiledTable:
     row_completeness_max: Optional[float] = None
     row_completeness_mean: Optional[float] = None
     functional_dependencies: Optional[list[dict]] = None  # [{from, to}]
+    quality_score: float = 0.0  # 0-100 scale, computed from anomalies/nulls/dupes
     error: Optional[str] = None
+
+
+def compute_quality_score(table: "ProfiledTable") -> float:
+    """Compute a 0-100 data quality score matching the dashboard JS formula."""
+    if table.error:
+        return 0.0
+    if not table.columns:
+        return 100.0
+    score = 100.0
+    # Anomaly penalty: 3 pts per anomaly, max 30
+    total_anomalies = sum(len(c.anomalies) for c in table.columns)
+    score -= min(30.0, total_anomalies * 3.0)
+    # Null penalty: avg null rate * 40, max 20
+    avg_null = sum(c.null_rate for c in table.columns) / len(table.columns)
+    score -= min(20.0, avg_null * 40.0)
+    # Duplicate penalty: duplicate_rate * 100, max 15
+    if table.duplicate_rate > 0:
+        score -= min(15.0, table.duplicate_rate * 100.0)
+    return max(0.0, round(score, 1))
 
 
 # Type-aware aggregate dispatch table.
@@ -178,6 +198,12 @@ AGGREGATE_MAP: dict[str, list[tuple[str, str]]] = {
 }
 
 
+def _quote_alias(alias: str) -> str:
+    """Quote a SQL alias to handle column names with spaces or special characters."""
+    escaped = alias.replace('"', '""')
+    return f'"{escaped}"'
+
+
 def _build_select_exprs(
     columns: list[ColumnSchema],
     adapter: BaseAdapter,
@@ -186,6 +212,7 @@ def _build_select_exprs(
 ) -> list[str]:
     """Build the list of SQL select expressions for a batch of columns."""
     qi = adapter.quote_identifier
+    qa = _quote_alias
     exprs = ["COUNT(*) AS sampled_row_count"]
 
     for col in columns:
@@ -196,29 +223,29 @@ def _build_select_exprs(
         for template, suffix in aggs:
             sql = template.format(col=qcol)
             alias = f"{col.name}__{suffix}"
-            exprs.append(f"{sql} AS {alias}")
+            exprs.append(f"{sql} AS {qa(alias)}")
 
         # STDDEV for numeric types
         if ct in ("integer", "float"):
-            stddev_sql = adapter.stddev_sql(qcol, f"{col.name}__stddev")
+            stddev_sql = adapter.stddev_sql(qcol, qa(f"{col.name}__stddev"))
             if stddev_sql:
                 exprs.append(stddev_sql)
 
             # Skewness & kurtosis
             skew_sql = adapter.skewness_sql(qcol)
             if skew_sql:
-                exprs.append(f"{skew_sql} AS {col.name}__skewness")
+                exprs.append(f"{skew_sql} AS {qa(f'{col.name}__skewness')}")
             kurt_sql = adapter.kurtosis_sql(qcol)
             if kurt_sql:
-                exprs.append(f"{kurt_sql} AS {col.name}__kurtosis")
+                exprs.append(f"{kurt_sql} AS {qa(f'{col.name}__kurtosis')}")
 
         # Percentiles for numeric types (engines that support it)
         if ct in ("integer", "float") and adapter.supports_percentiles():
             pct_exprs = adapter.percentile_sql(
                 qcol,
                 [0.05, 0.25, 0.5, 0.75, 0.95],
-                [f"{col.name}__p5", f"{col.name}__p25", f"{col.name}__median",
-                 f"{col.name}__p75", f"{col.name}__p95"],
+                [qa(f"{col.name}__p5"), qa(f"{col.name}__p25"), qa(f"{col.name}__median"),
+                 qa(f"{col.name}__p75"), qa(f"{col.name}__p95")],
             )
             exprs.extend(pct_exprs)
 
@@ -226,9 +253,9 @@ def _build_select_exprs(
         # On sampled data, skip here — we run a separate full-table distinct query.
         if full_scan:
             if config.exact_distinct or adapter.distinct_mode() == "exact":
-                exprs.append(f"COUNT(DISTINCT {qcol}) AS {col.name}__approx_distinct")
+                exprs.append(f"COUNT(DISTINCT {qcol}) AS {qa(f'{col.name}__approx_distinct')}")
             else:
-                exprs.append(adapter.approx_distinct_sql(qcol, f"{col.name}__approx_distinct"))
+                exprs.append(adapter.approx_distinct_sql(qcol, qa(f"{col.name}__approx_distinct")))
 
     return exprs
 
@@ -240,13 +267,14 @@ def _build_distinct_exprs(
 ) -> list[str]:
     """Build SELECT expressions for approx_distinct on the full (unsampled) table."""
     qi = adapter.quote_identifier
+    qa = _quote_alias
     exprs = []
     for col in columns:
         qcol = qi(col.name)
         if config.exact_distinct or adapter.distinct_mode() == "exact":
-            exprs.append(f"COUNT(DISTINCT {qcol}) AS {col.name}__approx_distinct")
+            exprs.append(f"COUNT(DISTINCT {qcol}) AS {qa(f'{col.name}__approx_distinct')}")
         else:
-            exprs.append(adapter.approx_distinct_sql(qcol, f"{col.name}__approx_distinct"))
+            exprs.append(adapter.approx_distinct_sql(qcol, qa(f"{col.name}__approx_distinct")))
     return exprs
 
 

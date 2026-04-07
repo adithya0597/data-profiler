@@ -551,7 +551,7 @@ def generate_demo_dashboard(run_id: str, results: list) -> None:
 def main():
     banner("Multi-Engine Data Profiler Demo")
     if Path(TPCDS_DB).exists():
-        print("  Dataset:  TPC-DS 1GB (25 tables, ~19.6M rows)")
+        print("  Dataset:  TPC-DS 1GB (24 tables, ~19.6M rows)")
     else:
         print("  Dataset:  Synthetic (5 tables, ~15.6K rows)")
         print("  Tip:      Set TPCDS_DB with the TPC-DS DuckDB path for full demo")

@@ -38,6 +38,8 @@ Thumbs.db
 
 # AI scaffolding (not part of submission)
 .claude/
+.claude-flow/
+.mcp.json
 CLAUDE.md
 project-state.md
 .claude-memory.md

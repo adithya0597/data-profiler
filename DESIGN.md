@@ -23,7 +23,9 @@ CLI (cli.py)
   └── Orchestrator (run.py)
         ├── SchemaWorker   — discovers tables, columns, native types
         ├── StatsWorker    — computes per-column statistics via SQL
-        ├── RelationshipWorker — infers FK relationships statistically
+        ├── RelationshipWorker — FK discovery (declared, semantic, composite, inferred)
+        ├── DeltaWorker    — incremental delta detection (schema hash, watermark, row count)
+        ├── MergeWorker    — Welford's parallel algorithm for statistical merging
         └── Enrichment layer
               ├── AnomalyDetector  — 19 rule-based anomaly flags
               ├── PatternMatcher   — PII and semantic pattern detection
@@ -31,6 +33,10 @@ CLI (cli.py)
               └── DuplicateDetector   — cross-table fingerprint matching
   └── Persistence
         ├── Serializers    — NDJSON, YAML, Parquet, CSV
+        ├── GraphModel     — property graph builder (nodes, edges, URNs)
+        ├── JSONLDSerializer — JSON-LD graph export (@context + @graph)
+        ├── GraphMLSerializer — GraphML XML export (Gephi/yEd compatible)
+        ├── ProfileStore   — SQLite-backed profile snapshots for incremental mode
         └── OpenMetadata   — catalog-compatible JSON export
   └── Report / Dashboard
         ├── report.py      — self-contained HTML with inline CSS/JS
@@ -136,16 +142,45 @@ MAD requires the median, which is not available mid-aggregate. Computed in Pytho
 
 ## 6. Relationship Discovery
 
-The relationship worker infers foreign key relationships **without access to DDL** — purely from statistical patterns in column data. The heuristic chain:
+The relationship worker discovers FK relationships through a multi-phase pipeline, combining DDL metadata with statistical and naming-convention heuristics:
+
+### Phase 1: Declared FKs
+Foreign keys reported by SQLAlchemy's `Inspector.get_foreign_keys()` are collected with full confidence (1.0). These are ground truth from the database catalog.
+
+### Phase 1.5: Semantic FK Discovery
+Columns ending in `_sk`, `_id`, or `_key` are analyzed using naming conventions common in data warehouse schemas (TPC-DS, Kimball-style star schemas):
+
+1. **Suffix stripping**: `ss_customer_sk` → stem `ss_customer`
+2. **Prefix stripping**: Remove the source table's column prefix (`ss_` for `store_sales`) → entity `customer`
+3. **Table matching**: Check if a table named `customer`, `customer_dim`, or `customers` exists
+4. **PK column matching**: Search the target table for a unique column matching `{entity}_sk`, `{entity}_id`, or any column ending in `{entity}{suffix}` (e.g., `c_customer_sk`)
+5. **Type compatibility**: Source and target columns must share the same canonical type
+
+Emits `relationship_type="semantic_fk"` with confidence 0.6 (heuristic) or refined by value overlap when an engine connection is available.
+
+### Phase 1.75: Composite Key Detection
+Tables with declared multi-column primary keys (from `TableConstraints.primary_key`) are matched against other tables:
+
+1. Identify tables with composite PKs (≥ 2 columns)
+2. For each composite PK, check if all PK columns exist in another table with compatible types
+3. Validate with multi-column tuple `INTERSECT` SQL when engine is available
+
+Emits `relationship_type="inferred_composite"` with confidence 0.5 (heuristic) or refined by overlap.
+
+### Phase 2: Inferred Relationships
+For columns not already matched by earlier phases:
 
 1. **Name matching**: `dept_id` in `employees` → candidate FK for any column named `dept_id` in another table
 2. **Type compatibility**: both columns must map to the same canonical type
-3. **Cardinality check**: the referencing column's `approx_distinct` must be ≤ the referenced column's (FKs can't have more unique values than their PK)
-4. **Value overlap**: a sample of values from the FK column is checked against the PK column. Overlap ≥ 80% confirms the relationship.
+3. **Uniqueness check**: at least one side must be `all_unique` (potential PK)
+4. **Value overlap**: when an engine is available, a sample `INTERSECT` confirms the relationship
 
-This is not foolproof — it misses FKs with non-matching names (e.g., `manager_id` → `emp_id`), and it can produce false positives when two tables happen to share integer sequences. But for the common case of well-named columns in normalized schemas, it recovers most FK relationships without any catalog metadata.
+Emits `relationship_type="inferred"` with confidence 0.5 (heuristic) or refined by overlap.
 
-**Why this matters for knowledge graphs:** An auto-discovered FK relationship is a graph edge. The relationship worker turns a flat set of column profiles into a connected graph structure that catalog systems can ingest directly via the OpenMetadata export.
+### Limitations
+Semantic FK discovery relies on naming conventions — tables with non-standard column naming (e.g., `manager_id` → `emp_id`) are only caught by Phase 2's exact name match. Composite detection only matches declared composite PKs, not arbitrary multi-column uniqueness (which would be combinatorially explosive).
+
+**Why this matters for knowledge graphs:** Each discovered FK relationship is a graph edge. The multi-phase pipeline recovers relationships that single-strategy approaches miss — declared FKs cover well-documented schemas, semantic FKs handle warehouse naming patterns, and inferred FKs catch the rest. The result is a connected graph structure that catalog systems can ingest directly via the OpenMetadata export.
 
 ---
 
@@ -167,7 +202,27 @@ These suggestions are emitted as structured objects (not raw SQL strings) so tha
 
 ---
 
-## 8. Configurability
+## 8. Data Quality Score
+
+Each profiled table receives a 0–100 quality score computed after all enrichment passes (anomaly detection, constraint suggestion) and persisted in `ProfiledTable.quality_score`. The score is available in all output formats (NDJSON, YAML, Parquet, CSV) — not just the dashboard.
+
+### Formula
+```
+score = 100
+score -= min(30, total_anomalies × 3)      # anomaly penalty
+score -= min(20, avg_null_rate × 40)        # null penalty
+score -= min(15, duplicate_rate × 100)      # duplicate penalty
+score = max(0, round(score))
+```
+
+The capped penalties mean the theoretical minimum score is 35 (all three penalties maxed: 30 + 20 + 15 = 65). A table with an error gets score 0; a table with no columns gets score 100.
+
+### Why persist it?
+The dashboard previously computed the score in JavaScript, making it invisible to NDJSON/YAML/Parquet consumers. Downstream systems (catalog UIs, data quality dashboards, alerting pipelines) can now consume the quality score directly from the profiler output without reimplementing the formula. The dashboard falls back to JS computation for backward compatibility with older exports.
+
+---
+
+## 9. Configurability
 
 All runtime behavior is controlled by `ProfilerConfig` (Pydantic model in `config.py`):
 
@@ -195,13 +250,112 @@ The `hll_guard` flag prevents HLL from being used on small tables where `COUNT(D
 
 ---
 
-## 9. What I'd Build Next
+## 10. Property Graph Output
 
-### Graph-first output
-The current OpenMetadata export is a flat list of table and column entities. A real catalog integration would produce a **property graph** — nodes for tables, columns, and datasets; edges for FK relationships, functional dependencies, and column lineage. The relationship worker already discovers the edges; the missing piece is a graph serialization format (RDF, labeled property graph, or Apache TinkerPop Gremlin).
+The profiler exports profiling results as a property graph — nodes for databases, schemas, tables, and columns; edges for containment, FK relationships, functional dependencies, and correlations. Two serialization formats are supported: JSON-LD (for semantic web / knowledge graph ingestion) and GraphML (for visual exploration in Gephi or yEd).
 
-### Incremental profiling
-The current profiler does a full scan on every run. For production use, you want **incremental profiling**: detect new rows since the last run (via a watermark column or CDC stream), profile only the delta, and merge statistics. The checkpoint system (`persistence/checkpoint.py`) is the foundation — it persists partial results and supports resume. The missing piece is statistical merging: `mean` and `stddev` can be merged exactly via Welford's online algorithm; histograms can be merged by bin; HLL sketches can be union-merged natively.
+### Graph Model
+
+The graph is built by `GraphBuilder` (`persistence/graph_model.py`), which is format-agnostic. Both serializers share the same builder — adding a future format (RDF, Cypher) requires only a new serializer, not a new graph builder.
+
+**Node types:**
+
+| Node Type | Key Properties |
+|-----------|----------------|
+| Database  | name, engine |
+| Schema    | name |
+| Table     | name, row_count, quality_score, profiled_at, duration_seconds |
+| Column    | name, canonical_type, null_rate, approx_distinct, mean, min, max, patterns, anomalies |
+
+**Edge types:**
+
+| Edge Label | Source → Target | Derived From |
+|------------|-----------------|--------------|
+| HAS_SCHEMA | Database → Schema | Run header metadata |
+| HAS_TABLE | Schema → Table | Each profiled table result |
+| HAS_COLUMN | Table → Column | Each column in a table |
+| FK_DECLARED | Column → Column | `relationship_type="declared_fk"` |
+| FK_SEMANTIC | Column → Column | `relationship_type="semantic_fk"` |
+| FK_INFERRED | Column → Column | `relationship_type="inferred"` |
+| FK_COMPOSITE | Table → Table | `relationship_type="inferred_composite"` (columns as edge property) |
+| FUNCTIONAL_DEP | Column → Column | `ProfiledTable.functional_dependencies` |
+| SIMILAR_TO | Column → Column | `ProfiledTable.correlations` (threshold > 0.7) |
+
+### Node Identifiers
+
+All nodes use stable URN identifiers: `urn:profiler:{database}:{schema}:{table}:{column}`. Names are lowercased and whitespace-normalized. These URNs are consistent across runs and formats, enabling graph merging and temporal comparison.
+
+### JSON-LD Format
+
+The JSON-LD serializer (`persistence/jsonld_serializer.py`) produces a `{"@context": {...}, "@graph": [...]}` structure. The `@context` maps property names to a `profiler:` namespace alongside `schema.org` terms. Each node becomes a JSON object with `@id` (the URN) and `@type` (the node type). Each edge becomes a JSON object with `source` and `target` URN references.
+
+### GraphML Format
+
+The GraphML serializer (`persistence/graphml_serializer.py`) produces valid XML with `<key>` declarations for all node and edge properties. Property types are mapped to GraphML primitives (`string`, `int`, `double`). The output loads directly in Gephi — use ForceAtlas2 layout and partition by the `label` attribute for effective visualization.
+
+### Why no new dependencies
+
+JSON-LD uses stdlib `json`. GraphML uses stdlib `xml.etree.ElementTree`. No new packages are introduced.
+
+### Validated topology (TPC-DS 1GB)
+
+Against the TPC-DS 1GB dataset (24 tables, 425 columns, 19.5M rows), the graph produces 451 nodes (1 Database + 1 Schema + 24 Tables + 425 Columns) and 633 edges (1 HAS_SCHEMA + 24 HAS_TABLE + 425 HAS_COLUMN + 13 FK_SEMANTIC + 170 FUNCTIONAL_DEP). Both JSON-LD and GraphML produce identical topology.
+
+---
+
+## 11. Incremental Profiling
+
+For production use, full-scan profiling on every run is wasteful when most tables haven't changed. The incremental profiling system detects changes since the last run and only re-profiles modified tables. Unchanged tables reuse prior results directly.
+
+### Delta Detection Cascade
+
+The `DeltaWorker` (`workers/delta_worker.py`) checks tables in order — the first check that triggers a change causes re-profiling:
+
+1. **Schema hash:** SHA-256 of sorted `(column_name, canonical_type)` pairs. If the hash differs from the prior run, the table schema changed → re-profile.
+2. **Watermark column:** If configured (`--watermark-column`), compares `SELECT MAX(watermark_col)` against the prior stored value. If the watermark advanced, new rows were appended → re-profile.
+3. **Row count:** `COUNT(*)` compared to the prior `total_row_count`. If different → re-profile.
+4. **Unchanged:** If none of the above triggered, the table is unchanged → reuse the prior profile.
+
+These are metadata-only queries (schema reflection, `MAX()`, `COUNT(*)`) — no full table scans occur for unchanged tables.
+
+### Profile Store
+
+`ProfileStore` (`persistence/profile_store.py`) shares the checkpoint database's SQLite connection and thread lock. Every profiling run — incremental or not — stores profile snapshots in a `profile_snapshots` table:
+
+```
+(run_id, table_name, profile_json, row_count, column_hash, watermark_value, database, schema_name, stored_at)
+```
+
+This means the very first run against a database is a full profile, but it stores the baseline automatically. The next `--incremental` run finds prior snapshots without any additional configuration.
+
+### Statistical Merging (Welford's Parallel Algorithm)
+
+For append-only tables detected via watermark, the `MergeWorker` (`workers/merge_worker.py`) queries only new rows and merges statistics with the prior profile:
+
+| Stat | Merge Strategy |
+|------|----------------|
+| null_count, sum, zero_count, negative_count | Additive |
+| min, max | `min(old, new)`, `max(old, new)` |
+| mean | Weighted: `(n_a × μ_a + n_b × μ_b) / (n_a + n_b)` |
+| variance, stddev | Welford parallel: `M2_ab = M2_a + M2_b + δ² × n_a × n_b / n_ab` |
+| approx_distinct | `max(prior, delta)` — conservative estimate |
+| histogram, top_values, benford | Not mergeable — use delta's values |
+| patterns, anomalies | Union of both sets |
+
+### Performance
+
+On TPC-DS 1GB (24 tables, 19.5M rows), incremental mode with no changes completes in **1.6 seconds** versus **66 seconds** for a full run — a **42× speedup**. The time is dominated by metadata queries (24 `COUNT(*)` checks). Tables with changes are re-profiled normally.
+
+### Key Design Decisions
+
+- **Always store baselines.** `profile_store` is always active, not gated behind `--incremental`. This removes the footgun of needing to remember `--store-baseline` on the first run.
+- **Cheap delta detection.** Schema hash and row count are metadata-only queries. Watermark is a single `MAX()`. No full table scans for unchanged tables.
+- **Conservative distinct estimate.** `max(prior, delta)` for `approx_distinct` is always ≥ truth. True HLL union requires engine-specific binary sketch access — deferred.
+- **Shared SQLite.** ProfileStore uses CheckpointDB's connection and lock — no second database file, thread-safe by construction.
+
+---
+
+## 12. What's Next
 
 ### Lineage tracking
 Column-level lineage — "this output column was derived from these input columns via this transformation" — is the highest-value metadata for a data quality platform. The profiler could detect lineage by comparing column value distributions across tables (high Pearson correlation + matching cardinality + matching min/max suggests a copy or near-copy relationship).
@@ -210,7 +364,13 @@ Column-level lineage — "this output column was derived from these input column
 Batch profiling on snapshots misses drift. A streaming variant would maintain running sketches (Count-Min Sketch for frequency, HLL for cardinality, t-digest for quantiles) over a Kafka topic or Delta Lake stream, emitting profile updates as the data changes rather than on a schedule.
 
 ### Atlas/DataHub native export
-The OpenMetadata export covers OpenMetadata's entity schema. Apache Atlas and DataHub have different entity models (Atlas uses TYPEDEF-based type system; DataHub uses MCE/MCPs with aspect versioning). Adding native exports for each would make the profiler a universal metadata feeder — profiling once, delivering to any catalog.
+The OpenMetadata and property graph exports cover generic catalog schemas. Apache Atlas and DataHub have specific entity models (Atlas uses TYPEDEF-based type system; DataHub uses MCE/MCPs with aspect versioning). Adding native exports for each would make the profiler a universal metadata feeder — profiling once, delivering to any catalog.
+
+### Declarative profiling DSL
+The `ProfilerConfig` (Pydantic model with typed toggles) and `AGGREGATE_MAP` (type→expression dispatch) are the foundation for a declarative system where type mappings, anomaly rules, constraint patterns, and output schemas are defined as configuration rather than code. The profiler would become an interpreter that executes those definitions against any connected engine.
+
+### HLL sketch union for incremental distinct counts
+The current incremental mode uses `max(prior, delta)` as a conservative estimate for approximate distinct counts. True HLL sketch union requires engine-specific binary sketch access (DuckDB exposes this; Snowflake/Databricks do not). Once implemented, incremental distinct counts would be as accurate as full-scan HLL.
 
 ---
 
@@ -219,5 +379,5 @@ The OpenMetadata export covers OpenMetadata's entity schema. Apache Atlas and Da
 1. The profiler is read-only — it never modifies the source database.
 2. `sample_size` rows are representative. Reservoir sampling (DuckDB) provides statistical guarantees; other engines use engine-native sampling which may introduce ordering bias on sorted datasets.
 3. HLL cardinality estimates have ±2% relative error. The `hll_guard` mitigates the worst cases.
-4. Relationship discovery assumes FK column names follow a `{table_singular_id}` or `{column_name}` convention. Non-conventional naming requires explicit DDL input.
+4. Relationship discovery covers declared FKs, naming-convention patterns (`*_sk`, `*_id`, `*_key`), composite PK matching, and exact column name matching. Non-conventional naming with no column name overlap may still require explicit DDL input.
 5. Benford's Law analysis is only meaningful for naturally-occurring numeric data (financial amounts, IDs, measurements). It is not applied to columns flagged as `boolean`, `date`, or where `min < 0`.

@@ -233,4 +233,10 @@ def create_serializer(
         return ParquetSerializer(path)
     if output_format == "csv":
         return CSVSerializer(path)
+    if output_format == "jsonld":
+        from data_profiler.persistence.jsonld_serializer import JSONLDSerializer
+        return JSONLDSerializer(path)
+    if output_format == "graphml":
+        from data_profiler.persistence.graphml_serializer import GraphMLSerializer
+        return GraphMLSerializer(path)
     return NDJSONSerializer(path)

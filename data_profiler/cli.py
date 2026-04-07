@@ -38,9 +38,12 @@ def cli(verbose: bool) -> None:
 @click.option("--stats-depth", default="full", type=click.Choice(["full", "fast"]))
 @click.option("--exact-distinct", is_flag=True, help="Use COUNT(DISTINCT) instead of HLL")
 @click.option("--column-batch-size", default=80, type=int, help="Max columns per SELECT")
-@click.option("--output-format", default="json", type=click.Choice(["json", "parquet", "yaml", "html"]))
+@click.option("--output-format", default="json", type=click.Choice(["json", "parquet", "yaml", "html", "jsonld", "graphml"]))
 @click.option("--output", "-o", default=None, help="Output file path")
 @click.option("--resume", default=None, help="Run ID to resume")
+@click.option("--incremental", is_flag=True, help="Only re-profile tables that changed since prior run")
+@click.option("--watermark-column", default=None, help="Timestamp/sequence column for append-only delta detection")
+@click.option("--prior-run-id", default=None, help="Run ID to compare against (auto-detected if omitted)")
 def run(
     engine: str,
     dsn: str,
@@ -54,6 +57,9 @@ def run(
     output_format: str,
     output: str | None,
     resume: str | None,
+    incremental: bool,
+    watermark_column: str | None,
+    prior_run_id: str | None,
 ) -> None:
     """Profile tables across database engines."""
     if sample > 0 and sample < 2:
@@ -72,6 +78,9 @@ def run(
         output_format=output_format,
         output=output,
         resume=resume,
+        incremental=incremental,
+        watermark_column=watermark_column,
+        prior_run_id=prior_run_id,
     )
 
     with Progress(

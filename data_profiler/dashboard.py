@@ -807,7 +807,7 @@ function esc(s) {
 
 function fmt(v) {
   if (v == null) return "\u2014";
-  if (typeof v === "number") return v.toLocaleString(undefined, {maximumFractionDigits: 2});
+  if (typeof v === "number") return v.toLocaleString("en-US", {maximumFractionDigits: 2});
   return esc(String(v));
 }
 
@@ -829,6 +829,18 @@ var QS_GOOD = 75;
 var QS_FAIR = 50;
 
 function qualityScore(t) {
+  if (t.quality_score != null && t.quality_score > 0) {
+    // Use persisted score; still compute breakdown for tooltip
+    var cols = t.columns || [];
+    var totalAnomalies = cols.length ? cols.reduce(function(s, c) { return s + (c.anomalies || []).length; }, 0) : 0;
+    var anomalyPenalty = Math.min(QS_ANOMALY_PENALTY_MAX, totalAnomalies * QS_ANOMALY_PENALTY_PER);
+    var avgNull = cols.length ? cols.reduce(function(s, c) { return s + (c.null_rate || 0); }, 0) / cols.length : 0;
+    var nullPenalty = Math.min(QS_NULL_PENALTY_MAX, avgNull * QS_NULL_PENALTY_WEIGHT);
+    var dupePenalty = t.duplicate_rate > 0 ? Math.min(QS_DUPE_PENALTY_MAX, t.duplicate_rate * QS_DUPE_PENALTY_WEIGHT) : 0;
+    t._qBreakdown = {anomalyPenalty: Math.round(anomalyPenalty), nullPenalty: Math.round(nullPenalty), dupePenalty: Math.round(dupePenalty)};
+    return t.quality_score;
+  }
+  // Fallback: compute from column data (for older exports without persisted score)
   if (t.error) return 0;
   var cols = t.columns || [];
   if (cols.length === 0) return 100;
@@ -843,7 +855,6 @@ function qualityScore(t) {
   if (t.duplicate_rate > 0) { dupePenalty = Math.min(QS_DUPE_PENALTY_MAX, t.duplicate_rate * QS_DUPE_PENALTY_WEIGHT); score -= dupePenalty; }
   var result = Math.max(0, Math.round(score));
   if (isNaN(result)) result = 0;
-  // Store breakdown for tooltip
   t._qBreakdown = {anomalyPenalty: Math.round(anomalyPenalty), nullPenalty: Math.round(nullPenalty), dupePenalty: Math.round(dupePenalty)};
   return result;
 }
@@ -1062,7 +1073,7 @@ function renderOverview() {
   topTables.forEach(function(t) {
     var w = (t.total_row_count / maxRows) * 100;
     var label = t.name.length > 12 ? t.name.slice(0, 12) + "\u2026" : t.name;
-    topTableBars += '<div class="bar-row"><span class="bar-label">' + esc(label) + '</span><span class="bar-track"><span class="bar-fill" style="width:' + w + '%;background:var(--accent)"></span><span class="bar-value">' + t.total_row_count.toLocaleString() + '</span></span></div>';
+    topTableBars += '<div class="bar-row"><span class="bar-label">' + esc(label) + '</span><span class="bar-track"><span class="bar-fill" style="width:' + w + '%;background:var(--accent)"></span><span class="bar-value">' + t.total_row_count.toLocaleString("en-US") + '</span></span></div>';
   });
 
   var qualityRings = TABLES.slice(0, 12).map(function(t) {
@@ -1075,8 +1086,8 @@ function renderOverview() {
     '<div class="header"><h2>Overview</h2></div>'
     + '<div class="kpi-grid">'
     + '<div class="kpi-card"><div class="kpi-label">Tables</div><div class="kpi-value">' + totalTables + '</div><div class="kpi-sub">' + (errorTables ? '<span style="color:var(--red)">' + errorTables + ' errors</span>' : 'All profiled') + '</div></div>'
-    + '<div class="kpi-card"><div class="kpi-label">Columns</div><div class="kpi-value">' + totalCols.toLocaleString() + '</div><div class="kpi-sub">' + Object.keys(typeCounts).length + ' canonical types</div></div>'
-    + '<div class="kpi-card"><div class="kpi-label">Total Rows</div><div class="kpi-value">' + totalRows.toLocaleString() + '</div><div class="kpi-sub">Across all tables</div></div>'
+    + '<div class="kpi-card"><div class="kpi-label">Columns</div><div class="kpi-value">' + totalCols.toLocaleString("en-US") + '</div><div class="kpi-sub">' + Object.keys(typeCounts).length + ' canonical types</div></div>'
+    + '<div class="kpi-card"><div class="kpi-label">Total Rows</div><div class="kpi-value">' + totalRows.toLocaleString("en-US") + '</div><div class="kpi-sub">Across all tables</div></div>'
     + '<div class="kpi-card"><div class="kpi-label">Avg Quality</div><div class="kpi-value" style="color:' + scoreColor(avgQuality) + '">' + avgQuality + '</div><div class="kpi-sub">Out of 100</div></div>'
     + '<div class="kpi-card"><div class="kpi-label">Anomalies</div><div class="kpi-value" style="color:' + (totalAnomalies > 0 ? 'var(--yellow)' : 'var(--green)') + '">' + totalAnomalies + '</div><div class="kpi-sub">' + Object.keys(anomalyCounts).length + ' unique types</div></div>'
     + '<div class="kpi-card"><div class="kpi-label">Patterns</div><div class="kpi-value">' + totalPatterns + '</div><div class="kpi-sub">Columns with patterns</div></div>'
@@ -1133,13 +1144,13 @@ function renderTables(filter) {
     var avgNull = (t.columns||[]).length > 0 ? (t.columns.reduce(function(s,c){return s+(c.null_rate||0);},0)/t.columns.length) : 0;
     return '<tr class="table-row-click" data-table="' + esc(t.name) + '" style="cursor:pointer">'
       + '<td><strong>' + esc(t.name) + '</strong></td>'
-      + '<td>' + t.total_row_count.toLocaleString() + '</td>'
+      + '<td>' + t.total_row_count.toLocaleString("en-US") + '</td>'
       + '<td>' + (t.columns||[]).length + '</td>'
       + '<td>' + scoreBadgeHTML(score) + '</td>'
       + '<td>' + (anomalies > 0 ? '<span class="badge badge-yellow">' + anomalies + '</span>' : '<span style="color:var(--text-dim)">0</span>') + '</td>'
       + '<td>' + nullBarHTML(avgNull) + '</td>'
-      + '<td>' + (t.duplicate_row_count > 0 ? '<span class="badge badge-red">' + t.duplicate_row_count.toLocaleString() + '</span>' : '<span style="color:var(--text-dim)">0</span>') + '</td>'
-      + '<td>' + (t.full_scan ? '<span class="badge badge-green">full scan</span>' : '<span class="badge badge-yellow">' + (t.sampled_row_count||0).toLocaleString() + ' of ' + t.total_row_count.toLocaleString() + '</span>') + '</td>'
+      + '<td>' + (t.duplicate_row_count > 0 ? '<span class="badge badge-red">' + t.duplicate_row_count.toLocaleString("en-US") + '</span>' : '<span style="color:var(--text-dim)">0</span>') + '</td>'
+      + '<td>' + (t.full_scan ? '<span class="badge badge-green">full scan</span>' : '<span class="badge badge-yellow">' + (t.sampled_row_count||0).toLocaleString("en-US") + ' of ' + t.total_row_count.toLocaleString("en-US") + '</span>') + '</td>'
       + '<td>' + (t.duration_seconds || 0).toFixed(2) + 's</td>'
       + '</tr>';
   }).join("");
@@ -1278,11 +1289,11 @@ function renderTableDetail(tableName) {
     + '<button id="close-detail-btn" style="margin-left:auto;background:var(--bg);border:1px solid var(--border);color:var(--text-dim);padding:0.3rem 0.75rem;border-radius:6px;cursor:pointer;font-size:0.8rem">Close</button>'
     + '</div>'
     + '<div class="detail-grid">'
-    + '<div class="detail-stat"><div class="label">Total Rows</div><div class="val">' + t.total_row_count.toLocaleString() + '</div></div>'
-    + '<div class="detail-stat"><div class="label">Sampled</div><div class="val">' + (t.sampled_row_count || 0).toLocaleString() + '</div></div>'
+    + '<div class="detail-stat"><div class="label">Total Rows</div><div class="val">' + t.total_row_count.toLocaleString("en-US") + '</div></div>'
+    + '<div class="detail-stat"><div class="label">Sampled</div><div class="val">' + (t.sampled_row_count || 0).toLocaleString("en-US") + '</div></div>'
     + '<div class="detail-stat"><div class="label">Columns</div><div class="val">' + (t.columns || []).length + '</div></div>'
     + '<div class="detail-stat"><div class="label">Full Scan</div><div class="val">' + (t.full_scan ? "Yes" : "No") + '</div></div>'
-    + '<div class="detail-stat"><div class="label">Duplicates</div><div class="val">' + (t.duplicate_row_count > 0 ? t.duplicate_row_count.toLocaleString() + " (" + pct(t.duplicate_rate) + ")" : "None") + '</div></div>'
+    + '<div class="detail-stat"><div class="label">Duplicates</div><div class="val">' + (t.duplicate_row_count > 0 ? t.duplicate_row_count.toLocaleString("en-US") + " (" + pct(t.duplicate_rate) + ")" : "None") + '</div></div>'
     + '<div class="detail-stat"><div class="label">Duration</div><div class="val">' + (t.duration_seconds || 0).toFixed(2) + 's</div></div>'
     + (t.row_completeness_mean != null ? '<div class="detail-stat"><div class="label">Row Completeness</div><div class="val">' + pct(t.row_completeness_mean) + ' avg (min ' + pct(t.row_completeness_min) + ')</div></div>' : '')
     + '</div>'
@@ -1587,7 +1598,7 @@ function renderQuality() {
     return '<div style="display:flex;align-items:center;gap:1.25rem;padding:0.75rem 1.25rem;border-bottom:1px solid var(--border-subtle)">'
       + '<span title="' + esc(qualityTooltip(t)) + '">' + qualityRingSVG(score, 48) + '</span>'
       + '<div style="flex:1;min-width:0"><div style="font-weight:600;color:var(--text-bright)">' + esc(t.name) + '</div>'
-      + '<div style="font-size:0.75rem;color:var(--text-dim)">' + t.total_row_count.toLocaleString() + ' rows, ' + cols.length + ' cols, avg null ' + pct(avgNull) + (t.row_completeness_mean != null ? ', row compl ' + pct(t.row_completeness_mean) : '') + (t.duplicate_row_count > 0 ? ', <span style="color:var(--red)">' + t.duplicate_row_count + ' dupes</span>' : '') + '</div>'
+      + '<div style="font-size:0.75rem;color:var(--text-dim)">' + t.total_row_count.toLocaleString("en-US") + ' rows, ' + cols.length + ' cols, avg null ' + pct(avgNull) + (t.row_completeness_mean != null ? ', row compl ' + pct(t.row_completeness_mean) : '') + (t.duplicate_row_count > 0 ? ', <span style="color:var(--red)">' + t.duplicate_row_count + ' dupes</span>' : '') + '</div>'
       + '<div style="margin-top:0.25rem">' + (anomalyPills || '<span style="font-size:0.75rem;color:var(--text-dim)">No anomalies</span>') + '</div>'
       + '</div></div>';
   }).join("");
@@ -1850,8 +1861,8 @@ function renderMissing() {
       + '<td>' + esc(r.table) + '</td>'
       + '<td>' + esc(r.column) + '</td>'
       + '<td>' + nullBarHTML(r.null_rate) + '</td>'
-      + '<td>' + r.null_count.toLocaleString() + '</td>'
-      + '<td>' + r.total.toLocaleString() + '</td>'
+      + '<td>' + r.null_count.toLocaleString("en-US") + '</td>'
+      + '<td>' + r.total.toLocaleString("en-US") + '</td>'
       + '</tr>';
   }).join('');
 
@@ -1906,7 +1917,7 @@ function renderMissing() {
     + '<div class="kpi-grid" style="margin-bottom:2rem">'
     + '<div class="kpi-card"><div class="kpi-label">Columns with Nulls</div><div class="kpi-value">' + rows.length + '</div></div>'
     + '<div class="kpi-card"><div class="kpi-label">Tables Affected</div><div class="kpi-value">' + tablesWithNulls.size + '</div></div>'
-    + '<div class="kpi-card"><div class="kpi-label">Total Null Cells</div><div class="kpi-value">' + totalNulls.toLocaleString() + '</div></div>'
+    + '<div class="kpi-card"><div class="kpi-label">Total Null Cells</div><div class="kpi-value">' + totalNulls.toLocaleString("en-US") + '</div></div>'
     + '<div class="kpi-card"><div class="kpi-label">Worst Column</div><div class="kpi-value" style="color:var(--red)">' + pct(maxRate) + '</div></div>'
     + '</div>'
     + '<div style="display:flex;align-items:center;gap:1rem;margin-bottom:1rem;font-size:0.75rem">'

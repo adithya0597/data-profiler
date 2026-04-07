@@ -22,6 +22,8 @@ The natural evolution is toward a **declarative profiling DSL** — where type m
 ### Schema Intelligence
 - **8 canonical types** normalize across engine vocabularies — `TIMESTAMP_NTZ`, `TIMESTAMPTZ`, and `DATETIME` all map to `datetime`, enabling cross-engine metadata comparison
 - **FK relationship inference** — discovers foreign key relationships statistically from column names, types, cardinality, and value overlap (no DDL access required)
+- **Semantic FK discovery** — detects naming-convention relationships (e.g., `ss_customer_sk` → `customer.c_customer_sk`) via suffix pattern matching (`*_sk`, `*_id`, `*_key`)
+- **Composite key detection** — identifies multi-column FK relationships by matching declared composite primary keys across tables
 - **Constraint suggestions** — derives `NOT NULL`, `UNIQUE`, and `CHECK` range recommendations from observed data distributions
 - **Functional dependency detection** — identifies columns that determine other columns within a table
 
@@ -36,13 +38,21 @@ The natural evolution is toward a **declarative profiling DSL** — where type m
 - **19 anomaly rules**: high null rate, single-value columns, all-unique columns, empty string dominance, PII patterns, Benford deviation, IQR outliers, z-score outliers, skewness, boolean imbalance, stale data, suspicious uniform length, low-cardinality numerics, leading/trailing whitespace
 - **PII and semantic pattern detection**: email, SSN, credit card, phone, IPv4, US ZIP, UUID, URL
 - **Duplicate detection** across tables via row fingerprinting
-- **Data quality scoring** (0–100) aggregated per table and per database
+- **Data quality scoring** (0–100) per table — persisted in output (NDJSON/YAML/Parquet/CSV), not just dashboard-only
 
-### Catalog Integration
+### Graph & Catalog Integration
+- **Property graph export (JSON-LD, GraphML)** — tables, columns, and relationships as nodes and edges with stable URN identifiers (`urn:profiler:{db}:{schema}:{table}:{col}`), ready for Neo4j, Apache Atlas, DataHub, or any graph database
 - **OpenMetadata-compatible JSON export** — table and column entities in OpenMetadata's schema, ready for catalog ingestion
 - **NDJSON streaming output** — each table flushes to disk on completion; a crash at table 200/247 preserves 199 profiles
 - **YAML, Parquet, and CSV output** — multiple formats for different downstream consumers
 - **Interactive HTML dashboard** — 8-section dark-theme dashboard with drill-down, correlation heatmaps, and quality scoring
+
+### Incremental Profiling
+- **Delta detection** — skips unchanged tables between runs using a 3-strategy cascade: schema hash → watermark column → row count comparison
+- **42x speedup** on repeated runs (tested on TPC-DS 1GB: 66s full → 1.6s incremental with all tables unchanged)
+- **Watermark-based detection** — for append-only tables, compares `MAX(watermark_column)` against prior run
+- **Automatic baseline storage** — every run stores profile snapshots for future incremental comparison, no configuration needed
+- **Statistical merging** via Welford's parallel algorithm — merges mean, variance, stddev, min/max, counts across profile snapshots
 
 ---
 
@@ -71,7 +81,7 @@ The demo runs 5 phases automatically and produces these files in `profiles/`:
 | `profile_report.html` | Self-contained HTML report — open in any browser |
 | `profile_dashboard.html` | Interactive 8-section dashboard — open in any browser |
 
-No external data required. If `data/tpcds_1gb.duckdb` is present, the demo uses the full TPC-DS 1GB dataset (25 tables, ~19.6M rows) instead of generating synthetic data.
+No external data required. If `data/tpcds_1gb.duckdb` is present, the demo uses the full TPC-DS 1GB dataset (24 tables, ~19.6M rows) instead of generating synthetic data.
 
 ---
 
@@ -88,7 +98,9 @@ data_profiler/
 ├── workers/
 │   ├── schema_worker.py    # Table/column discovery via SQLAlchemy Inspector
 │   ├── stats_worker.py     # Type-aware aggregate dispatch, batched stats queries per table
-│   └── relationship_worker.py  # FK inference via name + cardinality + value overlap
+│   ├── relationship_worker.py  # FK inference: declared, semantic (naming patterns), composite, and value overlap
+│   ├── delta_worker.py     # Incremental delta detection (schema hash, watermark, row count)
+│   └── merge_worker.py     # Welford's parallel algorithm for statistical merging
 ├── schema/
 │   └── portable_types.py   # 8 canonical types with cross-engine type mapping
 ├── enrichment/
@@ -99,7 +111,11 @@ data_profiler/
 ├── persistence/
 │   ├── checkpoint.py       # SQLite-based resume support (crash recovery)
 │   ├── serializers.py      # NDJSON, YAML, Parquet, CSV serializers
-│   └── openmetadata.py     # OpenMetadata-compatible catalog export
+│   ├── openmetadata.py     # OpenMetadata-compatible catalog export
+│   ├── graph_model.py      # Property graph builder (nodes, edges, URNs)
+│   ├── jsonld_serializer.py  # JSON-LD graph serializer (@context + @graph)
+│   ├── graphml_serializer.py # GraphML XML serializer (Gephi/yEd compatible)
+│   └── profile_store.py    # SQLite-backed profile snapshots for incremental mode
 ├── cli.py                  # Click CLI with Rich progress bars
 ├── config.py               # Pydantic configuration model (all runtime toggles)
 ├── run.py                  # Orchestrator: parallel workers, checkpoint integration
@@ -208,9 +224,12 @@ profiler run \
 | `--stats-depth` | full | `full` = all statistics; `fast` = schema only |
 | `--exact-distinct` | false | Force `COUNT(DISTINCT)` instead of HLL |
 | `--column-batch-size` | 80 | Max columns per aggregate SELECT (for wide tables) |
-| `--output-format` | json | `json`, `yaml`, `parquet`, `html` |
+| `--output-format` | json | `json`, `yaml`, `parquet`, `html`, `jsonld`, `graphml` |
 | `--output`, `-o` | auto | Output file path (default: `profiles/{run_id}.ndjson`) |
 | `--resume` | — | Resume a previous run by run ID |
+| `--incremental` | false | Only re-profile tables that changed since prior run |
+| `--watermark-column` | — | Timestamp/sequence column for append-only delta detection |
+| `--prior-run-id` | — | Run ID to compare against (auto-detected if omitted) |
 | `-v`, `--verbose` | false | Enable debug logging |
 
 ### `profiler dashboard`
@@ -330,6 +349,33 @@ profiler export \
 
 Output contains table and column entities with FK relationships, ready for catalog ingestion via OpenMetadata's API.
 
+### Export as property graph (for Gephi, Neo4j, Atlas)
+
+```bash
+# JSON-LD — nodes and edges with @context for semantic web / knowledge graph ingestion
+profiler run --engine duckdb --dsn "duckdb:///data/warehouse.duckdb" --output-format jsonld -o profiles/graph.jsonld
+
+# GraphML — open directly in Gephi or yEd for visual exploration
+profiler run --engine duckdb --dsn "duckdb:///data/warehouse.duckdb" --output-format graphml -o profiles/graph.graphml
+```
+
+The graph includes Database, Schema, Table, and Column nodes connected by HAS_SCHEMA, HAS_TABLE, HAS_COLUMN edges, plus FK_DECLARED, FK_SEMANTIC, FK_INFERRED, FK_COMPOSITE, FUNCTIONAL_DEP, and SIMILAR_TO relationship edges. Each node carries its full statistical profile as properties.
+
+### Incremental profiling (skip unchanged tables)
+
+```bash
+# First run — profiles all tables and stores snapshots automatically
+profiler run --engine duckdb --dsn "duckdb:///data/warehouse.duckdb" -o profiles/baseline.json
+
+# Later run — only re-profiles tables that changed (schema, row count, or watermark)
+profiler run --engine duckdb --dsn "duckdb:///data/warehouse.duckdb" --incremental -o profiles/update.json
+
+# With watermark column — detects new rows in append-only tables
+profiler run --engine duckdb --dsn "duckdb:///data/warehouse.duckdb" --incremental --watermark-column updated_at -o profiles/delta.json
+```
+
+Delta detection checks (in order): schema hash change → watermark column advance → row count change → unchanged (skip). On a TPC-DS 1GB dataset (24 tables, 19.5M rows), incremental mode completes in 1.6s vs 66s for a full run when no tables have changed.
+
 ### Resume a crashed run
 
 ```bash
@@ -365,17 +411,23 @@ run_id, results = run_profiler(config)
 ## Tests
 
 ```bash
-# Run all tests (345 tests)
+# Run all tests (534 tests)
 pytest tests/ -v
 
 # Unit tests only (no database required, fast)
 pytest tests/test_portable_types.py tests/test_anomaly.py tests/test_aggregates.py tests/test_stats.py -v
 
-# Integration tests (requires TPC-DS database)
-pytest tests/test_integration.py -v
+# End-to-end accuracy tests (builds DuckDB datasets, validates profiler output)
+pytest tests/test_e2e.py -v
+
+# Graph output tests (JSON-LD and GraphML serialization)
+pytest tests/test_graph.py -v
+
+# Incremental profiling tests (delta detection, merge, profile store)
+pytest tests/test_incremental.py -v
 ```
 
-Tests cover type mapping, aggregate dispatch, anomaly detection, pattern matching, constraint suggestion, relationship inference, dashboard generation, report generation, OpenMetadata export, duplicate detection, and cross-engine consistency.
+Tests cover type mapping, aggregate dispatch, anomaly detection, pattern matching, constraint suggestion, relationship inference, graph output (JSON-LD + GraphML), incremental profiling (delta detection + Welford merging), dashboard generation, report generation, OpenMetadata export, duplicate detection, and cross-engine consistency.
 
 ---
 

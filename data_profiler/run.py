@@ -68,6 +68,24 @@ def run_profiler(
     checkpoint = CheckpointDB()
     completed_tables = checkpoint.get_completed_tables(run_id) if config.resume else set()
 
+    # Profile store — always active so every run stores snapshots for future incremental use
+    profile_store = checkpoint.get_profile_store()
+    prior_profiles: dict[str, ProfiledTable] = {}
+    prior_metadata: dict[str, dict] = {}
+    if config.incremental:
+        prior_rid = config.prior_run_id or profile_store.get_latest_run_id(
+            database=config.database, schema_name=config.schema_name,
+        )
+        if prior_rid:
+            logger.info("Incremental mode: comparing against run %s", prior_rid)
+            prior_profiles = profile_store.load_all_profiles(prior_rid)
+            for tname in prior_profiles:
+                meta = profile_store.get_prior_metadata(prior_rid, tname)
+                if meta:
+                    prior_metadata[tname] = meta
+        else:
+            logger.info("Incremental mode: no prior run found, full profiling")
+
     # Discover tables
     tables = discover_tables(engine, schema=config.schema_name)
     if not tables:
@@ -83,7 +101,8 @@ def run_profiler(
         logger.info("Resuming run %s: %d/%d tables already done", run_id, skipped, total)
 
     # Output setup
-    output_ext = {"json": ".ndjson", "yaml": ".yaml", "parquet": ".parquet", "html": ".html"}
+    output_ext = {"json": ".ndjson", "yaml": ".yaml", "parquet": ".parquet", "html": ".html",
+                   "jsonld": ".jsonld", "graphml": ".graphml"}
     output_path = config.output or f"profiles/{run_id}{output_ext.get(config.output_format, '.ndjson')}"
 
     serializer = create_serializer(config.output_format, output_path)
@@ -111,7 +130,28 @@ def run_profiler(
     error_count = 0
     done_count = skipped
 
-    def _profile_one(table_name: str) -> ProfiledTable:
+    def _profile_one(table_name: str) -> ProfiledTable | None:
+        # Incremental delta check
+        if config.incremental and table_name in prior_metadata:
+            from data_profiler.workers.delta_worker import check_delta, compute_column_hash
+            tbl_schema = discover_schema(engine, table_name, config.schema_name)
+            delta_result = check_delta(
+                engine=engine,
+                table_name=table_name,
+                schema=config.schema_name,
+                prior_metadata=prior_metadata.get(table_name),
+                prior_profile=prior_profiles.get(table_name),
+                watermark_column=config.watermark_column,
+                current_columns=tbl_schema.columns,
+                quote_fn=adapter.quote_identifier,
+            )
+            if not delta_result.needs_profiling:
+                logger.info("Skipping unchanged table: %s", table_name)
+                checkpoint.mark_skipped(run_id, table_name)
+                return delta_result.prior_profile
+
+            logger.info("Re-profiling %s (reason: %s)", table_name, delta_result.reason)
+
         checkpoint.mark_started(run_id, table_name)
         tbl_schema = discover_schema(engine, table_name, config.schema_name)
         result = profile_table(adapter, tbl_schema, config)
@@ -131,6 +171,30 @@ def run_profiler(
         else:
             checkpoint.mark_done(run_id, table_name)
 
+        # Store profile snapshot for future incremental runs
+        if profile_store and not result.error:
+            try:
+                from data_profiler.workers.delta_worker import compute_column_hash
+                from data_profiler.workers.schema_worker import ColumnSchema
+                col_schemas = [
+                    ColumnSchema(name=c.name, engine_type=c.engine_type, canonical_type=c.canonical_type,
+                                 comment=c.comment, nullable=c.nullable)
+                    for c in result.columns
+                ]
+                col_hash = compute_column_hash(col_schemas)
+                wm_value = None
+                if config.watermark_column:
+                    wm_col = next((c for c in result.columns if c.name == config.watermark_column), None)
+                    if wm_col and wm_col.max is not None:
+                        wm_value = str(wm_col.max)
+                profile_store.store_profile(
+                    run_id=run_id, table_name=table_name, profile=result,
+                    column_hash=col_hash, watermark_value=wm_value,
+                    database=config.database, schema_name=config.schema_name,
+                )
+            except Exception as e:
+                logger.warning("Failed to store profile snapshot for %s: %s", table_name, e)
+
         # Constraint suggestions (post-profiling enrichment)
         if not result.error:
             try:
@@ -139,6 +203,10 @@ def run_profiler(
                     result.suggested_constraints = cs
             except Exception as e:
                 logger.warning("Constraint suggestion failed for %s: %s", table_name, e)
+
+        # Compute data quality score (after all enrichments)
+        from data_profiler.workers.stats_worker import compute_quality_score
+        result.quality_score = compute_quality_score(result)
 
         serializer.flush(result)
         results.append(result)
