@@ -8,7 +8,7 @@ This project implements the **metadata ingestion layer** of a larger knowledge p
 
 The architecture reflects this:
 
-- **Deterministic, typed metadata.** The 8-canonical-type system is a portable schema language: every engine's native type vocabulary normalizes to a single taxonomy, so a `TIMESTAMP_NTZ` from Snowflake and a `DATETIME` from DuckDB produce structurally identical metadata. This is the same problem a knowledge graph's type system solves — one representation, many sources.
+- **Deterministic, typed metadata.** The 10-canonical-type system is a portable schema language: every engine's native type vocabulary normalizes to a single taxonomy, so a `TIMESTAMP_NTZ` from Snowflake and a `DATETIME` from DuckDB produce structurally identical metadata. This is the same problem a knowledge graph's type system solves — one representation, many sources.
 - **Declarative dispatch.** The `AGGREGATE_MAP` in `stats_worker.py` is a type→expression dispatch table — given a canonical type, it emits the correct SQL aggregates for that type on that engine. Adding a new metric or a new engine means extending the map, not rewriting control flow. This pattern is a step toward a DSL for profiling rules: define *what* to compute declaratively, let the engine adapter handle *how*.
 - **Graph-ready output.** The relationship worker discovers FK edges and functional dependencies statistically. The OpenMetadata exporter serializes table/column entities in catalog-native schema. These are not reporting features — they produce the nodes and edges a knowledge graph ingests directly.
 - **Engine abstraction via capability flags.** Each adapter declares what it supports (`supports_hll`, `supports_percentiles`, `supports_stddev`) and the profiling logic adapts without branching. This is the adapter pattern designed for a world where new engines are added by implementing an interface, not by modifying the core.
@@ -92,7 +92,7 @@ data_profiler/
 ├── adapters/               # One adapter per engine
 │   ├── base.py             # Abstract interface: connect(), sample_clause(), quote_identifier()
 │   ├── duckdb.py           # HLL, reservoir sampling, approx_quantile, skewness/kurtosis
-│   ├── snowflake.py        # TABLESAMPLE BERNOULLI, PERCENTILE_CONT, HLL_COUNT
+│   ├── snowflake.py        # SAMPLE BERNOULLI, APPROX_PERCENTILE, APPROX_COUNT_DISTINCT
 │   ├── databricks.py       # Backtick quoting, TABLESAMPLE, approx_count_distinct
 │   └── sqlite.py           # Exact COUNT(DISTINCT), Python-side stddev/percentiles
 ├── workers/
@@ -310,7 +310,7 @@ profiler run \
   -o profiles/snowflake_prod.json
 ```
 
-Snowflake adapter uses `SAMPLE (n ROWS)` for native row sampling, `APPROX_COUNT_DISTINCT` for HLL, and `APPROX_PERCENTILE` for quantiles. Parallelism is safe — each worker gets its own connection from the pool.
+Snowflake adapter uses `SAMPLE BERNOULLI (pct)` for percentage-based sampling with deterministic seed, `APPROX_COUNT_DISTINCT` for HLL, and `APPROX_PERCENTILE` for quantiles. Parallelism is safe — each worker gets its own connection from the pool.
 
 ### Profile a Databricks SQL warehouse
 
@@ -411,7 +411,7 @@ run_id, results = run_profiler(config)
 ## Tests
 
 ```bash
-# Run all tests (534 tests)
+# Run all tests (572 tests)
 pytest tests/ -v
 
 # Unit tests only (no database required, fast)

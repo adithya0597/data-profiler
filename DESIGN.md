@@ -56,10 +56,10 @@ SQLAlchemy is used **only for connection pooling, reflection, and DDL introspect
 Each engine gets an adapter (`adapters/duckdb.py`, `adapters/snowflake.py`, etc.) that overrides:
 
 - `quote_identifier(name)` — backticks for Databricks, double-quotes for others
-- `sample_clause(n, total)` — `USING SAMPLE` for DuckDB, `TABLESAMPLE` for Snowflake, `LIMIT` for SQLite
-- `supports_hll`, `supports_stddev`, `supports_percentiles` — capability flags
-- `approx_distinct_expr(col)` — HLL expression per engine
-- `stddev_expr(col)` — dialect-specific standard deviation
+- `sample_clause(table_name, sample_size, total_rows)` — `USING SAMPLE` for DuckDB, `SAMPLE BERNOULLI` for Snowflake, `TABLESAMPLE` for Databricks, `LIMIT` for SQLite
+- `supports_native_stddev()`, `supports_percentiles()`, `supports_regex()` — capability methods
+- `approx_distinct_sql(column, alias)` — HLL expression per engine
+- `stddev_sql(column, alias)` — dialect-specific standard deviation
 
 The `BaseAdapter` provides safe defaults (exact `COUNT(DISTINCT)`, no percentiles). Engine-specific capabilities layer on top without changing the core profiling logic.
 
@@ -95,7 +95,7 @@ For large tables, profiling the full dataset is impractical. The profiler uses a
 **Tier 1 — Sampled statistics (fast)**
 - Applied when `sample_size < table_row_count`
 - DuckDB: `USING SAMPLE {n} ROWS (reservoir, 42)` — reservoir sampling for statistical guarantees
-- Snowflake: `TABLESAMPLE BERNOULLI ({pct} PERCENT)` — percentage-based
+- Snowflake: `SAMPLE BERNOULLI ({pct}) SEED (42)` — percentage-based Bernoulli with deterministic seed
 - SQLite: no native sampling; uses `ORDER BY RANDOM() LIMIT {n}` (expensive but necessary)
 - Databricks: `TABLESAMPLE ({pct} PERCENT)` — percentage-based Bernoulli sampling
 
@@ -230,25 +230,36 @@ All runtime behavior is controlled by `ProfilerConfig` (Pydantic model in `confi
 
 ```python
 class ProfilerConfig(BaseModel):
-    engine: str                    # duckdb | snowflake | databricks | sqlite
-    dsn: str                       # SQLAlchemy connection string
-    sample_size: int = 10_000      # rows per table for sampled stats
-    concurrency: int = 4           # parallel table workers
-    exact_distinct: bool = False   # force COUNT(DISTINCT) over HLL
-    include_tables: list[str] = [] # allowlist (empty = all tables)
-    exclude_tables: list[str] = [] # denylist
-    run_relationships: bool = True
-    run_constraints: bool = True
-    run_duplicates: bool = False   # expensive cross-table operation
-    run_benford: bool = True
-    run_correlations: bool = True
-    correlation_max_columns: int = 50  # cap to avoid O(n²) explosion
-    hll_guard: bool = True         # skip HLL if table < 10K rows (use exact)
-    output_format: str = "ndjson"  # ndjson | yaml | parquet | csv
-    output_path: str = "profiles/" # output directory
+    engine: str                        # duckdb | snowflake | databricks | sqlite
+    dsn: str                           # SQLAlchemy connection string
+    database: str | None = None        # database/catalog to profile
+    schema_name: str | None = None     # schema filter (omit for all)
+    sample_size: int = 10_000          # rows per table for sampled stats
+    concurrency: int = 4               # parallel table workers
+    stats_depth: str = "full"          # "full" = all stats; "fast" = schema only
+    exact_distinct: bool = False       # force COUNT(DISTINCT) over HLL
+    column_batch_size: int = 80        # max columns per aggregate SELECT
+    output_format: str = "json"        # json | yaml | parquet | csv | html | jsonld | graphml
+    output: str | None = None          # output file path (auto-generated if omitted)
+    resume: str | None = None          # run ID to resume
+    incremental: bool = False          # only re-profile changed tables
+    watermark_column: str | None = None  # timestamp/sequence col for delta detection
+    prior_run_id: str | None = None    # run ID to compare against (auto-detected)
+    enable_patterns: bool = True       # regex pattern detection on strings
+    discover_constraints: bool = True  # PK/FK/UNIQUE/CHECK via Inspector
+    discover_relationships: bool = True  # cross-table FK and inferred relationships
+    detect_duplicates: bool = True     # count duplicate rows per table
+    duplicate_column_limit: int = 50   # skip duplicate check for wide tables
+    enable_histogram: bool = True      # histograms for numeric columns
+    histogram_bins: int = 10           # number of histogram bins
+    enable_correlation: bool = True    # Pearson/Cramér's V correlations
+    correlation_max_columns: int = 20  # cap to avoid O(n²) explosion
+    enable_benford: bool = True        # Benford's Law on numeric columns
+    query_timeout: int = 300           # statement timeout in seconds (0 = no limit)
+    anomaly_thresholds: AnomalyThresholds = AnomalyThresholds()
 ```
 
-The `hll_guard` flag prevents HLL from being used on small tables where `COUNT(DISTINCT)` is cheaper and exact. `correlation_max_columns` caps the O(n²) correlation matrix computation — for a 500-column table, computing all pairs is 125,000 queries; the cap selects the top-N columns by variance.
+`correlation_max_columns` caps the O(n²) correlation matrix computation — for a 500-column table, computing all pairs is 125,000 queries; the cap selects the top-N columns by variance. `query_timeout` prevents unbounded execution on large tables; Snowflake uses `STATEMENT_TIMEOUT_IN_SECONDS`, Databricks relies on cluster-level settings.
 
 ---
 
