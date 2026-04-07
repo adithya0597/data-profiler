@@ -915,7 +915,7 @@ def profile_table(
 
     try:
         # Get total row count (separate query, no sampling)
-        total_rows = get_row_count(engine, table_name, schema)
+        total_rows = get_row_count(engine, table_name, schema, quote_fn=adapter.quote_identifier)
         result.total_row_count = total_rows
 
         if config.stats_depth == "fast":

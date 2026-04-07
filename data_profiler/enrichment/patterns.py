@@ -88,7 +88,7 @@ def fetch_string_sample(
     if not column_names:
         return {}
 
-    qi = quote_fn if quote_fn else lambda x: x
+    qi = quote_fn if quote_fn else lambda x: f'"{x}"'
     qualified = f"{qi(schema)}.{qi(table_name)}" if schema else qi(table_name)
     result: dict[str, list[str]] = {col: [] for col in column_names}
 

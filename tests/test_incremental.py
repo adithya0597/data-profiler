@@ -249,8 +249,7 @@ class TestDeltaDetection:
         assert result.needs_profiling is True
         assert result.reason == "watermark_advanced"
         assert result.prior_profile is prior_profile
-        assert result.watermark_filter is not None
-        assert "'2026-01-01'" in result.watermark_filter
+        assert result.prior_watermark_value == "2026-01-01"
 
 
 # ---------------------------------------------------------------------------

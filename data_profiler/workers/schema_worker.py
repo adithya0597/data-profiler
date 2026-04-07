@@ -70,9 +70,15 @@ def discover_schema(engine: Engine, table_name: str, schema: str | None = None) 
     return TableSchema(name=table_name, columns=columns, comment=table_comment)
 
 
-def get_row_count(engine: Engine, table_name: str, schema: str | None = None) -> int:
+def get_row_count(
+    engine: Engine,
+    table_name: str,
+    schema: str | None = None,
+    quote_fn: Any = None,
+) -> int:
     """Get exact row count for a table."""
-    qualified = f"{schema}.{table_name}" if schema else table_name
+    qi = quote_fn if quote_fn else lambda x: f'"{x}"'
+    qualified = f"{qi(schema)}.{qi(table_name)}" if schema else qi(table_name)
     with engine.connect() as conn:
         result = conn.execute(text(f"SELECT COUNT(*) FROM {qualified}"))
         return result.scalar() or 0

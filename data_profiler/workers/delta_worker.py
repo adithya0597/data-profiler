@@ -19,7 +19,7 @@ class DeltaResult:
     needs_profiling: bool
     reason: str  # "new_table", "schema_changed", "watermark_advanced", "row_count_changed", "unchanged"
     prior_profile: "ProfiledTable | None" = None
-    watermark_filter: str | None = None  # SQL WHERE clause for append-only profiling
+    prior_watermark_value: str | None = None  # Prior watermark for parameterized filtering
 
 
 def compute_column_hash(columns: list["ColumnSchema"]) -> str:
@@ -54,7 +54,7 @@ def check_delta(
 
     # 2. Watermark column (append-only detection)
     if watermark_column:
-        qi = quote_fn if quote_fn else lambda x: x
+        qi = quote_fn if quote_fn else lambda x: f'"{x}"'
         qtable = f"{qi(schema)}.{qi(table_name)}" if schema else qi(table_name)
         qcol = qi(watermark_column)
 
@@ -65,18 +65,15 @@ def check_delta(
 
         prior_watermark = prior_metadata.get("watermark_value")
         if current_watermark and current_watermark != prior_watermark:
-            wm_filter = None
-            if prior_watermark:
-                wm_filter = f"{qcol} > '{prior_watermark}'"
             return DeltaResult(
                 needs_profiling=True,
                 reason="watermark_advanced",
                 prior_profile=prior_profile,
-                watermark_filter=wm_filter,
+                prior_watermark_value=prior_watermark,
             )
 
     # 3. Row count change
-    qi = quote_fn if quote_fn else lambda x: x
+    qi = quote_fn if quote_fn else lambda x: f'"{x}"'
     qtable = f"{qi(schema)}.{qi(table_name)}" if schema else qi(table_name)
     sql = text(f"SELECT COUNT(*) FROM {qtable}")
     with engine.connect() as conn:

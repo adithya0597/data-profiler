@@ -41,7 +41,7 @@ def _check_value_overlap(
     """
     from sqlalchemy import text
 
-    qi = quote_fn if quote_fn else lambda x: x
+    qi = quote_fn if quote_fn else lambda x: f'"{x}"'
     qcol = qi(column)
     q1 = f"{qi(schema)}.{qi(table1)}" if schema else qi(table1)
     q2 = f"{qi(schema)}.{qi(table2)}" if schema else qi(table2)
@@ -218,7 +218,7 @@ def _check_multi_column_overlap(
     """Check value overlap for multiple columns (composite key)."""
     from sqlalchemy import text
 
-    qi = quote_fn if quote_fn else lambda x: x
+    qi = quote_fn if quote_fn else lambda x: f'"{x}"'
     q1 = f"{qi(schema)}.{qi(table1)}" if schema else qi(table1)
     q2 = f"{qi(schema)}.{qi(table2)}" if schema else qi(table2)
 

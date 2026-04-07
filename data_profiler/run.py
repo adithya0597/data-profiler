@@ -89,7 +89,8 @@ def run_profiler(
     # Discover tables
     tables = discover_tables(engine, schema=config.schema_name)
     if not tables:
-        logger.warning("No tables found in %s", config.dsn)
+        from sqlalchemy.engine.url import make_url
+        logger.warning("No tables found in %s", make_url(config.dsn).render_as_string(hide_password=True))
         return run_id, []
 
     # Filter already-completed tables on resume
